@@ -1,0 +1,1 @@
+jayden 的对话助手，采用nuxt4 + vue3 + tailwind + prisma + postgresql 技术栈
