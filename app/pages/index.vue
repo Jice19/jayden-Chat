@@ -41,11 +41,11 @@
             @compositionend="isComposing = false"
           ></textarea>
           <button 
-            @click="sendMessage"
-            :disabled="!inputText.valueOf()"
+            @click="isSending ? abortSend() : sendMessage()"
+            :disabled="(!inputText || !inputText.trim()) && !isSending"
             class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            发送
+            {{ isSending ? '中断' : '发送' }}
           </button>
         </div>
         <button class="mt-2 text-blue-500 hover:text-blue-600 text-sm">
@@ -59,11 +59,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-const { inputText, chatList, sendMessage } = useChat()
+const { inputText, chatList, isSending, sendMessage, abortSend } = useChat()
 const isComposing = ref(false)
 
 const onEnterSend = () => {
   if (isComposing.value) return
+  if (isSending.value) return
   sendMessage()
 }
 </script>
