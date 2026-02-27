@@ -3,6 +3,11 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
   css: ['~/assets/main.css'],
+  runtimeConfig: {
+    public: {
+      apiBase: '/api'
+    }
+  },
   postcss: {
     plugins: {
       '@tailwindcss/postcss': { config: './tailwind.config.js' },
