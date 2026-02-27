@@ -1,4 +1,3 @@
-// server/api/chat/list.get.ts
 import { PrismaClient } from '@prisma/client'
 
 // 全局单例模式

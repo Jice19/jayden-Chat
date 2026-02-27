@@ -4,9 +4,9 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   css: ['~/assets/main.css'],
   runtimeConfig: {
-    public: {
-      apiBase: '/api'
-    }
+    aliyunApiKey: process.env.ALIYUN_API_KEY || '',
+    // 客户端不暴露任何敏感信息
+    public: {}
   },
   postcss: {
     plugins: {

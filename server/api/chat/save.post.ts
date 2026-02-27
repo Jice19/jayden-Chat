@@ -1,4 +1,3 @@
-// server/api/chat/save.post.ts
 // 核心：用 Nuxt 内置的 import 方式，兼容 Prisma 5.x
 import { PrismaClient } from '@prisma/client'
 
