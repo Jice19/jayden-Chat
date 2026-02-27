@@ -1,5 +1,5 @@
 // 封装阿里云通义千问 API 调用逻辑（使用全局 API Key）
-export async function callAliyunAI(prompt: string) {
+export async function callAliyunAI(prompt: string, history: Array<{ role: string, content: string }> = []) {
   // 1. 从 Nuxt 运行时配置读取全局变量
   const config = useRuntimeConfig()
   const rawKey = config.aliyunApiKey
@@ -18,6 +18,13 @@ export async function callAliyunAI(prompt: string) {
     throw new Error('阿里云 API Key 未配置！请检查全局环境变量')
   }
 
+  // 构建消息列表：历史记录 + 当前提问
+  const messages = [
+    { role: 'system', content: '你是一个乐于助人的 AI 助手。' },
+    ...history,
+    { role: 'user', content: prompt }
+  ]
+
   try {
     // 3. 调用阿里云 AI API（OpenAI 兼容格式）
     const response = await $fetch<{
@@ -35,9 +42,7 @@ export async function callAliyunAI(prompt: string) {
       },
       body: {
         model: modelName, // 指定调用的模型
-        messages: [
-          { role: 'user', content: prompt } // 用户的提问内容
-        ],
+        messages: messages,
         temperature: 0.7, // 回复随机性（0-1，越小越稳定）
         top_p: 0.8,
         max_tokens: 2000 // 最大回复长度

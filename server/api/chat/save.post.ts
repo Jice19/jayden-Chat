@@ -10,7 +10,7 @@ if (process.env.NODE_ENV !== 'production') global.prisma = prisma
 export default defineEventHandler(async (event) => {
   try {
     const requestBody = await readBody(event)
-    const { content, isUser } = requestBody
+    const { content, isUser, sessionId } = requestBody
 
     if (!content || content.trim() === '') {
       return {
@@ -20,10 +20,27 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    let currentSessionId = sessionId
+
+    // 如果没有 SessionID，且是用户消息，则创建新会话
+    // 注意：如果是 AI 回复，前端必须传 SessionID，否则 AI 回复会变成无主或者新会话（逻辑上不通）
+    // 不过，为了健壮性，如果 AI 回复没带 ID，我们也可以暂时允许为空或者新建（虽然不合理）
+    // 这里我们主要处理用户第一条消息自动建会话的逻辑
+    if (!currentSessionId && isUser) {
+      const title = content.trim().substring(0, 20)
+      const newSession = await prisma.session.create({
+        data: {
+          title
+        }
+      })
+      currentSessionId = newSession.id
+    }
+
     const savedChat = await prisma.chat.create({
       data: {
         content: content.trim(),
-        isUser: isUser || false
+        isUser: isUser || false,
+        sessionId: currentSessionId
       }
     })
 

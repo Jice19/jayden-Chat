@@ -1,7 +1,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { useApi } from './useApi'
 import type { ApiResult, AiReplyResult } from '../../types/api'
-import type { ChatMessage } from '../../types/chat'
+import type { ChatMessage, Session } from '../../types/chat'
 
 export const useChat = () => {
   const inputText = ref('')
@@ -10,6 +10,10 @@ export const useChat = () => {
   const abortController = ref<AbortController | null>(null)
   const api = useApi()
   const fallbackReply = 'jayden-chat罢工啦～请稍后再试'
+
+  // 会话管理状态
+  const currentSessionId = ref<string | null>(null)
+  const sessionList = ref<Session[]>([])
 
   const scrollToBottom = () => {
     nextTick(() => {
@@ -22,9 +26,36 @@ export const useChat = () => {
     })
   }
 
+  const loadSessionList = async () => {
+    try {
+      const res = (await api.get<ApiResult<Session[]>>('/session/list')) as unknown as ApiResult<Session[]>
+      if (res.success && Array.isArray(res.data)) {
+        sessionList.value = res.data
+      }
+    } catch (error) {
+      console.error('加载会话列表失败:', error)
+    }
+  }
+
+  const switchSession = async (sessionId: string) => {
+    if (currentSessionId.value === sessionId) return
+    currentSessionId.value = sessionId
+    await loadChatList()
+    scrollToBottom()
+  }
+
+  const createNewSession = () => {
+    currentSessionId.value = null
+    chatList.value = []
+  }
+
   const loadChatList = async () => {
     try {
-      const res = (await api.get<ApiResult<ChatMessage[]>>('/chat/list')) as unknown as ApiResult<ChatMessage[]>
+      const url = currentSessionId.value 
+        ? `/chat/list?sessionId=${currentSessionId.value}`
+        : '/chat/list'
+      
+      const res = (await api.get<ApiResult<ChatMessage[]>>(url)) as unknown as ApiResult<ChatMessage[]>
 
       if (!res || typeof res !== 'object') {
         console.error('接口返回格式异常：', res)
@@ -46,12 +77,18 @@ export const useChat = () => {
     try {
       const res = (await api.post<ApiResult<ChatMessage>>('/chat/save', {
         content,
-        isUser
+        isUser,
+        sessionId: currentSessionId.value
       })) as unknown as ApiResult<ChatMessage>
 
       if (!res || !res.success) {
         console.error('保存消息失败：', res?.message)
         return null
+      }
+
+      if (res.data && res.data.sessionId && !currentSessionId.value) {
+        currentSessionId.value = res.data.sessionId
+        loadSessionList()
       }
 
       if (res.data && typeof res.data.content === 'string') {
@@ -101,7 +138,10 @@ export const useChat = () => {
     try {
       const aiRes = (await api.post<AiReplyResult>(
         '/chat/ai-reply',
-        { prompt: userContent },
+        { 
+          prompt: userContent,
+          sessionId: currentSessionId.value
+        },
         { signal: controller.signal }
       )) as unknown as AiReplyResult
 
@@ -136,13 +176,23 @@ export const useChat = () => {
     }
   }
 
-  onMounted(loadChatList)
+  onMounted(async () => {
+    await loadSessionList()
+    if (sessionList.value.length > 0 && sessionList.value[0]) {
+      currentSessionId.value = sessionList.value[0].id
+    }
+    await loadChatList()
+  })
 
   return {
     inputText,
     chatList,
     isSending,
     sendMessage,
-    abortSend
+    abortSend,
+    currentSessionId,
+    sessionList,
+    createNewSession,
+    switchSession
   }
 }
