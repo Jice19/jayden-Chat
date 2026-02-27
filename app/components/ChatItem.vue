@@ -7,12 +7,17 @@
       ]"
     >
       <button
-        class="absolute top-1 right-1 text-xs px-3 py-1.5 rounded-full border border-gray-200 bg-white/90 text-gray-700 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:shadow hover:bg-white active:scale-95"
+        class="absolute top-1 right-1 text-xs px-3 py-1.5 rounded-full border border-gray-200 bg-white/90 text-gray-700 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:shadow hover:bg-white active:scale-95 z-10"
         @click="onCopy"
         type="button"
       >
         {{ copyLabel }}
       </button>
+      <div v-if="!content && !isUser" class="flex items-center gap-1 text-gray-400">
+        <span class="animate-bounce">●</span>
+        <span class="animate-bounce delay-100">●</span>
+        <span class="animate-bounce delay-200">●</span>
+      </div>
       <MarkdownRenderer :source="content" />
     </div>
   </div>

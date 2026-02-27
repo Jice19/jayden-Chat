@@ -8,9 +8,10 @@ export default defineEventHandler(async (event) => {
   try {
     // 1. 获取前端传递的用户提问
     const body = await readBody(event)
-    const { prompt, sessionId } = body
+    const { prompt, sessionId, stream = false } = body
 
     if (!prompt || prompt.trim() === '') {
+      // 保持原有错误返回格式
       return {
         code: 400,
         success: false,
@@ -41,8 +42,24 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // 3. 调用阿里云 AI 接口（带上下文）
-    const reply = await callAliyunAI(prompt, history)
+    // 3. 调用阿里云 AI 接口
+    // 如果是流式请求，直接返回流
+    if (stream) {
+      const aiStream = await callAliyunAI(prompt, history, true)
+      
+      // 设置 SSE 响应头
+      setResponseHeader(event, 'Content-Type', 'text/event-stream')
+      setResponseHeader(event, 'Cache-Control', 'no-cache')
+      setResponseHeader(event, 'Connection', 'keep-alive')
+      
+      // 将 ReadableStream 直接 pipe 给客户端
+      // 注意：sendStream 内部会处理 pipe
+      return sendStream(event, aiStream as ReadableStream)
+    }
+
+    // 非流式逻辑（保持兼容）
+    // 注意：callAliyunAI 第三个参数传 false
+    const reply = await callAliyunAI(prompt, history, false)
 
     // 4. 返回 AI 回复给前端
     return {
