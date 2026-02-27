@@ -1,10 +1,5 @@
 import axios, { AxiosHeaders, type AxiosError, type AxiosInstance, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
-
-export interface ApiError {
-  status: number
-  message: string
-  data?: unknown
-}
+import type { ApiError } from '../../types/api'
 
 const normalizeError = (error: unknown): ApiError => {
   const axiosError = axios.isAxiosError(error) ? error : null

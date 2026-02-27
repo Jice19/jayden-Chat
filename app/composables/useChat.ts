@@ -1,24 +1,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { useApi } from './useApi'
-
-interface ChatMessage {
-  id?: string
-  content: string
-  isUser: boolean
-  createdAt?: string
-}
-
-interface ApiResult<T> {
-  success: boolean
-  message?: string
-  data: T
-}
-
-interface AiReplyResult {
-  success: boolean
-  message?: string
-  reply: string
-}
+import type { ApiResult, AiReplyResult } from '../../types/api'
+import type { ChatMessage } from '../../types/chat'
 
 export const useChat = () => {
   const inputText = ref('')
