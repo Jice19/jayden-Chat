@@ -34,7 +34,9 @@
             class="flex-1 border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             placeholder="输入你的问题..."
             rows="3"
-            @keyup.enter="sendMessage"
+            @keydown.enter.exact.prevent="onEnterSend"
+            @compositionstart="isComposing = true"
+            @compositionend="isComposing = false"
           ></textarea>
           <button 
             @click="sendMessage"
@@ -53,5 +55,13 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+
 const { inputText, chatList, sendMessage } = useChat()
+const isComposing = ref(false)
+
+const onEnterSend = () => {
+  if (isComposing.value) return
+  sendMessage()
+}
 </script>
