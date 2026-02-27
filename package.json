@@ -10,6 +10,7 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@prisma/client": "5.19.1",
     "nuxt": "^4.3.1",
     "prismjs": "^1.30.0",
     "vue": "^3.5.28",
@@ -18,8 +19,10 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.1",
+    "@types/pg": "^8.16.0",
     "autoprefixer": "^10.4.24",
     "postcss": "^8.5.6",
+    "prisma": "5.19.1",
     "tailwindcss": "^4.2.1"
   }
 }

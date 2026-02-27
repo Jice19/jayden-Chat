@@ -1,0 +1,16 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  
+  provider = "postgresql"
+  url      = "postgresql://jayden:123456@localhost:5432/doubao_db?schema=public"
+}
+
+model Chat {
+  id        String   @id @default(cuid())
+  content   String
+  isUser    Boolean
+  createdAt DateTime @default(now())
+}
