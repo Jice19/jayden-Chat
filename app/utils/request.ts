@@ -18,7 +18,7 @@ const normalizeError = (error: unknown): ApiError => {
 export const createApiClient = (config: { baseURL: string }): AxiosInstance => {
   const instance = axios.create({
     baseURL: config.baseURL,
-    timeout: 15000,
+    timeout: 60000,
     withCredentials: true
   })
 
