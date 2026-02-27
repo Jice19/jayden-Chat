@@ -5,6 +5,8 @@ import { PrismaClient } from '@prisma/client'
 // 解决 Nuxt 热更新时重复创建 Prisma 实例的问题（可选但推荐）
 const prisma = global.prisma || new PrismaClient()
 if (process.env.NODE_ENV !== 'production') global.prisma = prisma
+// 打印全局变量，验证是否读取成功
+  // console.log('全局 API Key：', process.env.ALIYUN_API_KEY) 
 
 export default defineEventHandler(async (event) => {
   try {
