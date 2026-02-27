@@ -1,18 +1,20 @@
 <template>
   <div class="flex h-screen w-full bg-gray-50">
-    <div class="w-64 bg-white border-r border-gray-200 p-4">
+    <div class="w-64 bg-white border-r border-gray-200 p-4 flex flex-col">
       <h2 class="text-lg font-bold text-gray-800 mb-4">对话历史</h2>
-      <div v-if="chatList.length > 0" class="space-y-2">
-        <div 
-          v-for="(item, index) in chatList" 
-          :key="index" 
-          class="text-sm p-2 rounded hover:bg-gray-100 truncate"
-        >
-          <span class="text-gray-500">{{ item.isUser ? '我：' : 'AI：' }}</span>
-          {{ item.content }}
+      <div class="flex-1 overflow-auto">
+        <div v-if="chatList.length > 0" class="space-y-2">
+          <div 
+            v-for="(item, index) in chatList" 
+            :key="index" 
+            class="text-sm p-2 rounded hover:bg-gray-100 truncate"
+          >
+            <span class="text-gray-500">{{ item.isUser ? '我：' : 'AI：' }}</span>
+            {{ item.content }}
+          </div>
         </div>
+        <div v-else class="text-gray-400 text-sm mt-2">暂无对话记录</div>
       </div>
-      <div v-else class="text-gray-400 text-sm mt-2">暂无对话记录</div>
     </div>
 
     <div class="flex-1 flex flex-col">
