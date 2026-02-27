@@ -1,5 +1,10 @@
 // 封装阿里云通义千问 API 调用逻辑（使用全局 API Key）
-export async function callAliyunAI(prompt: string, history: Array<{ role: string, content: string }> = []) {
+// 支持流式和非流式调用
+export async function callAliyunAI(
+  prompt: string, 
+  history: Array<{ role: string, content: string }> = [],
+  stream = false
+) {
   // 1. 从 Nuxt 运行时配置读取全局变量
   const config = useRuntimeConfig()
   const rawKey = config.aliyunApiKey
@@ -25,36 +30,57 @@ export async function callAliyunAI(prompt: string, history: Array<{ role: string
     { role: 'user', content: prompt }
   ]
 
-  try {
-    // 3. 调用阿里云 AI API（OpenAI 兼容格式）
-    const response = await $fetch<{
-      choices?: Array<{
-        message?: {
-          content?: string
-        }
-      }>
-    }>(endpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`, // 核心：使用全局 API Key 认证
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: {
-        model: modelName, // 指定调用的模型
-        messages: messages,
-        temperature: 0.7, // 回复随机性（0-1，越小越稳定）
-        top_p: 0.8,
-        max_tokens: 2000 // 最大回复长度
-      }
-    })
+  // 请求体
+  const body = {
+    model: modelName,
+    messages: messages,
+    temperature: 0.7,
+    top_p: 0.8,
+    max_tokens: 2000,
+    stream: stream // 核心：是否开启流式
+  }
 
-    // 4. 解析 AI 回复结果（兼容 OpenAI 格式）
-    const aiReply = response.choices?.[0]?.message?.content
-    if (!aiReply) {
-      throw new Error('AI 回复为空，返回格式：' + JSON.stringify(response))
+  const headers = {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+    'Accept': stream ? 'text/event-stream' : 'application/json'
+  }
+
+  try {
+    // 3. 调用阿里云 AI API
+    // 注意：如果是流式，我们需要返回原生 Response 对象以便后续处理
+    if (stream) {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body)
+      })
+      
+      if (!response.ok) {
+        throw new Error(`API 请求失败: ${response.status} ${response.statusText}`)
+      }
+      
+      return response.body // 返回 ReadableStream
+    } else {
+      // 非流式调用（保持原有逻辑）
+      const response = await $fetch<{
+        choices?: Array<{
+          message?: {
+            content?: string
+          }
+        }>
+      }>(endpoint, {
+        method: 'POST',
+        headers,
+        body
+      })
+
+      const aiReply = response.choices?.[0]?.message?.content
+      if (!aiReply) {
+        throw new Error('AI 回复为空，返回格式：' + JSON.stringify(response))
+      }
+      return aiReply
     }
-    return aiReply
   } catch (error) {
     const errorMsg = (error as Error).message
     console.error('阿里云 AI 调用失败：', errorMsg)

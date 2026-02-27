@@ -1,5 +1,6 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { useApi } from './useApi'
+import { fetchEventSource } from '@microsoft/fetch-event-source'
 import type { ApiResult, AiReplyResult } from '../../types/api'
 import type { ChatMessage, Session } from '../../types/chat'
 
@@ -135,45 +136,110 @@ export const useChat = () => {
       scrollToBottom()
     }
 
-    try {
-      const aiRes = (await api.post<AiReplyResult>(
-        '/chat/ai-reply',
-        { 
-          prompt: userContent,
-          sessionId: currentSessionId.value
-        },
-        { signal: controller.signal }
-      )) as unknown as AiReplyResult
+    // 乐观更新：先在界面上显示一个空的 AI 消息
+    const tempAiMsgId = Date.now().toString()
+    const tempAiMsg = {
+      id: tempAiMsgId,
+      content: '', // 初始为空，后续流式追加
+      isUser: false,
+      createdAt: new Date().toISOString()
+    }
+    chatList.value.push(tempAiMsg)
+    scrollToBottom()
 
-      if (!aiRes || !aiRes.success || typeof aiRes.reply !== 'string') {
-        console.error('AI 回复生成失败：', aiRes?.message)
-        const savedAi = await saveMessage(fallbackReply, false)
-        if (savedAi) {
-          chatList.value.push(savedAi)
-          scrollToBottom()
+    // 完整的 AI 回复内容，用于最后保存
+    let fullReply = ''
+
+    await fetchEventSource('/api/chat/ai-reply', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt: userContent,
+        sessionId: currentSessionId.value,
+        stream: true // 开启流式
+      }),
+      signal: controller.signal,
+      
+      async onopen(response) {
+        if (response.ok) {
+          return // 连接成功
+        } else {
+          // 如果连接失败，抛出错误进入 onerror -> catch
+          throw new Error(`连接失败: ${response.status}`)
         }
-        return
-      }
+      },
+      
+      onmessage(msg) {
+        // 处理 SSE 消息
+        // 阿里云/OpenAI 格式: data: {"choices": [{"delta": {"content": "..."}}]}
+        try {
+          if (msg.data === '[DONE]') return
+          
+          const data = JSON.parse(msg.data)
+          // 兼容 OpenAI 格式
+          const content = data.choices?.[0]?.delta?.content || data.choices?.[0]?.message?.content || ''
+          
+          if (content) {
+            fullReply += content
+            // 实时更新界面
+            const targetMsg = chatList.value.find(m => m.id === tempAiMsgId)
+            if (targetMsg) {
+              targetMsg.content = fullReply
+              scrollToBottom()
+            }
+          }
+        } catch (e) {
+          console.error('解析 SSE 消息失败:', e)
+        }
+      },
+      
+      onclose() {
+        // 结束时，保存完整的 AI 回复到数据库
+        // 注意：这里需要处理空回复的情况
+        if (!fullReply) return
 
-      const savedAi = await saveMessage(aiRes.reply, false)
-      if (savedAi) {
-        chatList.value.push(savedAi)
-        scrollToBottom()
+        saveMessage(fullReply, false).then(savedAi => {
+          if (savedAi) {
+            // 用数据库返回的真实数据替换临时消息（主要为了更新 ID 和 createdAt）
+            const index = chatList.value.findIndex(m => m.id === tempAiMsgId)
+            if (index !== -1) {
+              chatList.value[index] = savedAi
+            }
+          }
+        })
+      },
+      
+      onerror(err) {
+        // fetchEventSource 的 onerror 如果不抛出错误，会自动重试
+        // 我们不希望重试，所以直接抛出
+        throw err 
       }
-    } catch (error) {
+    }).catch(async (error) => {
+      // 这里捕获 fetchEventSource 抛出的所有错误
       if (controller.signal.aborted) return
+      
       console.error('AI 回复生成失败：', error)
+      
+      // 移除临时消息
+      const index = chatList.value.findIndex(m => m.id === tempAiMsgId)
+      if (index !== -1) {
+        chatList.value.splice(index, 1)
+      }
+      
+      // 显示并保存错误提示
       const savedAi = await saveMessage(fallbackReply, false)
       if (savedAi) {
         chatList.value.push(savedAi)
         scrollToBottom()
       }
-    } finally {
+    }).finally(() => {
       if (abortController.value === controller) {
         abortController.value = null
       }
       isSending.value = false
-    }
+    })
   }
 
   onMounted(async () => {
