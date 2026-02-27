@@ -6,7 +6,10 @@ import type { ChatMessage } from '../../types/chat'
 export const useChat = () => {
   const inputText = ref('')
   const chatList = ref<ChatMessage[]>([])
+  const isSending = ref(false)
+  const abortController = ref<AbortController | null>(null)
   const api = useApi()
+  const fallbackReply = 'jayden-chat罢工啦～请稍后再试'
 
   const scrollToBottom = () => {
     nextTick(() => {
@@ -67,10 +70,26 @@ export const useChat = () => {
     }
   }
 
+  const abortSend = async () => {
+    if (!abortController.value) return
+    abortController.value.abort()
+    abortController.value = null
+    isSending.value = false
+    const savedAi = await saveMessage(fallbackReply, false)
+    if (savedAi) {
+      chatList.value.push(savedAi)
+      scrollToBottom()
+    }
+  }
+
   const sendMessage = async () => {
+    if (isSending.value) return
     const userContent = inputText.value
     if (!userContent || userContent.trim() === '') return
 
+    isSending.value = true
+    const controller = new AbortController()
+    abortController.value = controller
     inputText.value = ''
 
     const savedUser = await saveMessage(userContent, true)
@@ -80,12 +99,19 @@ export const useChat = () => {
     }
 
     try {
-      const aiRes = (await api.post<AiReplyResult>('/chat/ai-reply', {
-        prompt: userContent
-      })) as unknown as AiReplyResult
+      const aiRes = (await api.post<AiReplyResult>(
+        '/chat/ai-reply',
+        { prompt: userContent },
+        { signal: controller.signal }
+      )) as unknown as AiReplyResult
 
       if (!aiRes || !aiRes.success || typeof aiRes.reply !== 'string') {
         console.error('AI 回复生成失败：', aiRes?.message)
+        const savedAi = await saveMessage(fallbackReply, false)
+        if (savedAi) {
+          chatList.value.push(savedAi)
+          scrollToBottom()
+        }
         return
       }
 
@@ -95,7 +121,18 @@ export const useChat = () => {
         scrollToBottom()
       }
     } catch (error) {
+      if (controller.signal.aborted) return
       console.error('AI 回复生成失败：', error)
+      const savedAi = await saveMessage(fallbackReply, false)
+      if (savedAi) {
+        chatList.value.push(savedAi)
+        scrollToBottom()
+      }
+    } finally {
+      if (abortController.value === controller) {
+        abortController.value = null
+      }
+      isSending.value = false
     }
   }
 
@@ -104,6 +141,8 @@ export const useChat = () => {
   return {
     inputText,
     chatList,
-    sendMessage
+    isSending,
+    sendMessage,
+    abortSend
   }
 }
