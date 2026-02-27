@@ -4,7 +4,8 @@ import { createApiClient } from '~/utils/request'
 
 export default defineNuxtPlugin(() => {
   const config = useRuntimeConfig()
-  const api = createApiClient({ baseURL: config.public.apiBase })
+  const baseURL = (config.public as { apiBase?: string }).apiBase || '/api'
+  const api = createApiClient({ baseURL })
 
   api.interceptors.request.use((request: InternalAxiosRequestConfig) => {
     const headers = request.headers

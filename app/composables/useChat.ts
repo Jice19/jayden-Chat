@@ -14,6 +14,12 @@ interface ApiResult<T> {
   data: T
 }
 
+interface AiReplyResult {
+  success: boolean
+  message?: string
+  reply: string
+}
+
 export const useChat = () => {
   const inputText = ref('')
   const chatList = ref<ChatMessage[]>([])
@@ -90,14 +96,24 @@ export const useChat = () => {
       scrollToBottom()
     }
 
-    setTimeout(async () => {
-      const aiContent = `你问的是：${userContent}\n这是 AI 模拟回复～`
-      const savedAi = await saveMessage(aiContent, false)
+    try {
+      const aiRes = (await api.post<AiReplyResult>('/chat/ai-reply', {
+        prompt: userContent
+      })) as unknown as AiReplyResult
+
+      if (!aiRes || !aiRes.success || typeof aiRes.reply !== 'string') {
+        console.error('AI 回复生成失败：', aiRes?.message)
+        return
+      }
+
+      const savedAi = await saveMessage(aiRes.reply, false)
       if (savedAi) {
         chatList.value.push(savedAi)
         scrollToBottom()
       }
-    }, 500)
+    } catch (error) {
+      console.error('AI 回复生成失败：', error)
+    }
   }
 
   onMounted(loadChatList)
