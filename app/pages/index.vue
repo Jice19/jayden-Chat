@@ -23,9 +23,8 @@
           class="mb-4 max-w-3xl"
           :class="item.isUser ? 'ml-auto' : 'mr-auto'"
           :is-user="item.isUser"
-        >
-          {{ item.content }}
-        </ChatItem>
+          :content="item.content"
+        />
       </div>
 
       <div class="bg-white border-t border-gray-200 p-4">
