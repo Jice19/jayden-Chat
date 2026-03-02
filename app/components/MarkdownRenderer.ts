@@ -1,11 +1,18 @@
-import { defineComponent, h, type PropType } from 'vue'
-import { createMarkdownRenderer } from 'vue-mdr'
-import CodeBlockRenderer from './CodeBlockRenderer.vue'
+import { defineComponent, h, type PropType, computed } from 'vue'
+import { marked } from 'marked'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/github.css' // 默认亮色主题
+import 'highlight.js/styles/github-dark.css' // 默认暗色主题
 
-const BaseMarkdownRenderer = createMarkdownRenderer({
-  codeBlock: {
-    renderer: CodeBlockRenderer
-  }
+// 配置 marked
+marked.setOptions({
+  renderer: new marked.Renderer(),
+  gfm: true, // 启用 GitHub Flavored Markdown
+  breaks: true, // 允许换行符
+  highlight: function (code, lang) {
+    const language = hljs.getLanguage(lang) ? lang : 'plaintext'
+    return hljs.highlight(code, { language }).value
+  },
 })
 
 export const MarkdownRenderer = defineComponent({
@@ -21,6 +28,17 @@ export const MarkdownRenderer = defineComponent({
     }
   },
   setup(props) {
-    return () => h(BaseMarkdownRenderer, { source: props.source, theme: props.theme })
+    const renderedMarkdown = computed(() => {
+      return marked.parse(props.source)
+    })
+
+    const themeClass = computed(() => {
+      return props.theme === 'dark' ? 'markdown-body-dark' : 'markdown-body-light'
+    })
+
+    return () => h('div', {
+      class: ['markdown-body', themeClass.value],
+      innerHTML: renderedMarkdown.value
+    })
   }
 })
