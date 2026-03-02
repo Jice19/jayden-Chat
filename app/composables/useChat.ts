@@ -36,6 +36,40 @@ export const useChat = () => {
     isLoadingChat.value = false // 结束加载
   }
 
+  const deleteSession = async (sessionId: string) => {
+    try {
+      const res = (await api.delete<ApiResult<any>>(`/session/${sessionId}`)) as unknown as ApiResult<any>
+      if (res.success) {
+        // 从列表中移除会话
+        sessionList.value = sessionList.value.filter(session => session.id !== sessionId)
+        
+        // 如果删除的是当前会话，则切换到第一个会话或创建新会话
+        if (currentSessionId.value === sessionId) {
+          currentSessionId.value = null
+          chatList.value = []
+          if (sessionList.value.length > 0) {
+            const firstSession = sessionList.value[0]
+            if (firstSession && firstSession.id) {
+              await switchSession(firstSession.id)
+            } else {
+              createNewSession()
+            }
+          } else {
+            createNewSession()
+          }
+        }
+        await loadSessionList() // 重新加载会话列表以确保最新状态
+        return true
+      } else {
+        console.error('删除会话失败:', res.message)
+        return false
+      }
+    } catch (error) {
+      console.error('删除会话异常:', error)
+      return false
+    }
+  }
+
   const createNewSession = () => {
     currentSessionId.value = null
     chatList.value = []
@@ -246,6 +280,7 @@ export const useChat = () => {
     currentSessionId,
     sessionList,
     createNewSession,
-    switchSession
+    switchSession,
+    deleteSession
   }
 }
