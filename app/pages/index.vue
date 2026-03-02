@@ -2,13 +2,19 @@
   <div class="flex h-screen w-full bg-gray-50 overflow-hidden">
     <!-- 侧边栏：会话列表 -->
     <div class="w-64 bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
-      <div class="p-4 border-b border-gray-100">
+      <div class="p-4 border-b border-gray-100 space-y-3">
         <button 
           @click="createNewSession"
           class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm"
         >
           <span>+</span> 新建对话
         </button>
+        <NuxtLink 
+          to="/virtual-list-demo"
+          class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm"
+        >
+          <span>🚀</span> 虚拟列表演示
+        </NuxtLink>
       </div>
       
       <div class="flex-1 overflow-y-auto p-2 space-y-1">
@@ -44,14 +50,10 @@
           <p>有什么可以帮你的吗？</p>
         </div>
         
-        <div v-else class="max-w-4xl mx-auto w-full pb-4">
-          <ChatItem
-            v-for="(item, index) in chatList" 
-            :key="index" 
-            class="mb-6"
-            :class="item.isUser ? 'ml-auto' : 'mr-auto'"
-            :is-user="item.isUser"
-            :content="item.content"
+        <div v-else class="max-w-4xl mx-auto w-full pb-4 h-full">
+          <ChatVirtualList
+            :messages="chatList"
+            :auto-scroll="true"
           />
         </div>
       </div>
