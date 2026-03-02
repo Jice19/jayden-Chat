@@ -15,13 +15,17 @@
         >
           <span>🚀</span> 虚拟列表演示
         </NuxtLink>
+        <!-- 主题切换按钮 -->
+        <div class="flex justify-center pt-2">
+          <ThemeToggle />
+        </div>
       </div>
       
       <div class="flex-1 overflow-y-auto p-2 space-y-1">
         <div 
           v-for="session in sessionList" 
           :key="session.id"
-          @click="switchSession(session.id)"
+          @click="switchSessionAndScroll(session.id)"
           class="p-3 rounded-lg cursor-pointer text-sm transition-colors border border-transparent"
           :class="[
             currentSessionId === session.id 
@@ -43,15 +47,20 @@
 
     <!-- 主聊天区域 -->
     <div class="flex-1 flex flex-col h-full relative">
+      <!-- 加载指示器 -->
+      <div v-if="isLoadingChat" class="absolute top-0 left-0 right-0 bg-blue-100 text-blue-700 p-2 text-center text-sm z-10">
+        加载中...
+      </div>
       <!-- 消息列表 -->
-      <div class="flex-1 overflow-auto p-4 scroll-smooth">
-        <div v-if="chatList.length === 0" class="h-full flex flex-col items-center justify-center text-gray-300">
+      <div class="flex-1 p-4 scroll-smooth" :class="{ 'pt-10': isLoadingChat }">
+        <div v-if="chatList.length === 0 && !isLoadingChat" class="h-full flex flex-col items-center justify-center text-gray-300">
           <div class="text-4xl mb-2">👋</div>
           <p>有什么可以帮你的吗？</p>
         </div>
         
         <div v-else class="max-w-4xl mx-auto w-full pb-4 h-full">
           <ChatVirtualList
+            ref="chatVirtualListRef"
             :messages="chatList"
             :auto-scroll="true"
           />
@@ -74,7 +83,7 @@
             
             <div class="absolute bottom-3 right-3 flex gap-2">
                <button 
-                @click="isSending ? abortSend() : sendMessage()"
+                @click="isSending ? abortSend() : sendMessageAndScroll()"
                 :disabled="(!inputText || !inputText.trim()) && !isSending"
                 class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-sm"
                 :class="isSending 
@@ -96,26 +105,55 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useChat } from '~/composables/useChat'
+import ChatVirtualList from '~/components/ChatVirtualList.vue' // 导入 ChatVirtualList 组件类型
+
+const chatVirtualListRef = ref<InstanceType<typeof ChatVirtualList> | null>(null)
 
 const { 
   inputText, 
   chatList, 
   isSending, 
-  sendMessage, 
+  isLoadingChat, // 引入加载状态
+  sendMessage: originalSendMessage, // 重命名原始的 sendMessage
   abortSend,
   sessionList,
   currentSessionId,
   createNewSession,
-  switchSession
+  switchSession: originalSwitchSession // 重命名原始的 switchSession
 } = useChat()
 
 const isComposing = ref(false)
 
+const switchSessionAndScroll = async (sessionId: string) => {
+  await originalSwitchSession(sessionId)
+  // 添加一个短暂的延迟，确保虚拟列表有时间渲染内容
+  setTimeout(() => {
+    chatVirtualListRef.value?.scrollToBottom()
+  }, 100) 
+}
+
+const sendMessageAndScroll = async () => {
+  await originalSendMessage()
+  // 添加一个短暂的延迟，确保虚拟列表有时间渲染内容
+  setTimeout(() => {
+    chatVirtualListRef.value?.scrollToBottom()
+  }, 100)
+}
+
 const onEnterSend = () => {
   if (isComposing.value) return
   if (isSending.value) return
-  sendMessage()
+  sendMessageAndScroll()
 }
+
+onMounted(() => {
+  // 确保在组件挂载后，如果 chatList 有内容，则滚动到底部
+  if (chatList.value.length > 0) {
+    nextTick(() => {
+      chatVirtualListRef.value?.scrollToBottom()
+    })
+  }
+})
 </script>

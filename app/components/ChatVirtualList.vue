@@ -44,7 +44,7 @@ const shouldScrollToBottom = ref(false)
 const chatMessages = computed(() => {
   return props.messages.map((message, index) => ({
     ...message,
-    id: `msg-${Date.now()}-${index}`,
+    id: message.id || `msg-${Date.now()}-${index}`,
     index
   }))
 })

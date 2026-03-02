@@ -1,0 +1,147 @@
+/* 深色模式样式覆盖 */
+[data-theme="dark"] {
+  /* 背景色 */
+  .bg-white {
+    background-color: var(--color-surface) !important;
+  }
+  
+  .bg-gray-50 {
+    background-color: var(--color-background) !important;
+  }
+  
+  .bg-gray-100 {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+  
+  .bg-blue-50 {
+    background-color: rgba(59, 130, 246, 0.1) !important;
+  }
+  
+  /* 边框色 */
+  .border-gray-100 {
+    border-color: var(--color-border) !important;
+  }
+  
+  .border-gray-200 {
+    border-color: var(--color-border) !important;
+  }
+  
+  /* 文字颜色 */
+  .text-gray-700 {
+    color: var(--color-text-primary) !important;
+  }
+  
+  .text-gray-400 {
+    color: var(--color-text-secondary) !important;
+  }
+  
+  .text-gray-400 {
+    color: var(--color-text-secondary) !important;
+  }
+  
+  .text-blue-700 {
+    color: var(--color-text-primary) !important;
+  }
+  
+  .font-medium {
+    color: var(--color-text-primary) !important;
+  }
+  
+  /* 悬停效果 */
+  .hover\:bg-gray-100:hover {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+  
+  /* 输入框样式 */
+  .bg-white.border-gray-300 {
+    background-color: var(--color-surface) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+  }
+  
+  /* 代码块样式 */
+  .prose pre {
+    background-color: #1e293b !important;
+    border: 1px solid #374151 !important;
+  }
+  
+  /* 代码块语法高亮 - 深色模式 */
+  .prose pre code {
+    color: #e5e7eb !important;
+  }
+  
+  /* 语法高亮颜色适配 */
+  .prose .token.comment,
+  .prose .token.prolog,
+  .prose .token.doctype,
+  .prose .token.cdata {
+    color: #6b7280 !important;
+  }
+  
+  .prose .token.punctuation {
+    color: #9ca3af !important;
+  }
+  
+  .prose .token.property,
+  .prose .token.tag,
+  .prose .token.boolean,
+  .prose .token.number,
+  .prose .token.constant,
+  .prose .token.symbol,
+  .prose .token.deleted {
+    color: #60a5fa !important;
+  }
+  
+  .prose .token.selector,
+  .prose .token.attr-name,
+  .prose .token.string,
+  .prose .token.char,
+  .prose .token.builtin,
+  .prose .token.inserted {
+    color: #34d399 !important;
+  }
+  
+  .prose .token.operator,
+  .prose .token.entity,
+  .prose .token.url,
+  .prose .language-css .token.string,
+  .prose .style .token.string {
+    color: #f59e0b !important;
+  }
+  
+  .prose .token.atrule,
+  .prose .token.attr-value,
+  .prose .token.keyword {
+    color: #a78bfa !important;
+  }
+  
+  .prose .token.function,
+  .prose .token.class-name {
+    color: #fbbf24 !important;
+  }
+  
+  .prose .token.regex,
+  .prose .token.important,
+  .prose .token.variable {
+    color: #f472b6 !important;
+  }
+  
+  /* 滚动条样式 */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: var(--color-background);
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: #4b5563;
+  }
+}

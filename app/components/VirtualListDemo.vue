@@ -260,17 +260,17 @@ onMounted(() => {
 .virtual-list-container {
   width: 100%;
   height: 600px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--color-background);
   display: flex;
   flex-direction: column;
 }
 
 .virtual-list-header {
   padding: 16px;
-  background: #f5f5f5;
-  border-bottom: 1px solid #ddd;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -280,7 +280,7 @@ onMounted(() => {
   display: flex;
   gap: 16px;
   font-size: 14px;
-  color: #666;
+  color: var(--color-text-secondary);
 }
 
 .virtual-list-viewport {
@@ -306,8 +306,8 @@ onMounted(() => {
 
 .virtual-list-item {
   padding: 16px;
-  border-bottom: 1px solid #eee;
-  background: #fff;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
   display: flex;
   flex-direction: column;
 }
@@ -320,23 +320,23 @@ onMounted(() => {
 
 .item-title {
   font-size: 16px;
-  color: #333;
+  color: var(--color-text-primary);
   font-weight: 500;
 }
 
 .item-position {
   font-size: 12px;
-  color: #999;
+  color: var(--color-text-secondary);
 }
 
 .item-text {
-  color: #666;
+  color: var(--color-text-primary);
   line-height: 1.5;
   margin-bottom: 8px;
 }
 
 .item-image {
-  background: #f0f0f0;
+  background: var(--color-surface);
   border-radius: 4px;
   margin-top: 8px;
 }

@@ -83,13 +83,12 @@ const getItemText = (item: T): string => {
   return String((item as any)[props.textField] || '')
 }
 
-// 初始化位置数据
 const initPositions = () => {
   positions.value = props.items.map((_, index) => ({
     index,
-    height: props.itemHeight,
+    height: props.itemHeight, // 初始使用预估高度
     top: index * props.itemHeight,
-    bottom: (index + 1) * props.itemHeight
+    bottom: (index + 1) * props.itemHeight,
   }))
 }
 
@@ -152,6 +151,12 @@ const updatePositions = () => {
     const nodes = itemRefs.value
     if (!nodes || nodes.length === 0) return
 
+    // 如果数据长度发生变化，重新初始化positions
+    if (positions.value.length !== props.items.length) {
+      initPositions()
+      return
+    }
+
     let diff = 0
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i]
@@ -167,17 +172,20 @@ const updatePositions = () => {
 
         if (value !== 0) {
           positions.value[index].height = realHeight
+          positions.value[index].bottom = positions.value[index].top + realHeight
           diff += value
         }
       }
     }
 
     if (diff !== 0 && positions.value) {
-      const start = visibleRange.value.start
-      for (let i = start + nodes.length; i < positions.value.length; i++) {
-        if (positions.value[i]) {
-          positions.value[i].top += diff
-          positions.value[i].bottom += diff
+      // 从当前可见区域的下一个元素开始，调整后续元素的top和bottom
+      const start = visibleRange.value.start + nodes.length
+      for (let i = start; i < positions.value.length; i++) {
+        const position = positions.value[i]
+        if (position) {
+          position.top += diff
+          position.bottom += diff
         }
       }
     }
@@ -215,7 +223,7 @@ watch(() => props.items, () => {
   if (props.scrollToBottom) {
     scrollToBottom()
   }
-}, { deep: true })
+}, { deep: true, immediate: true })
 
 // 生命周期
 onMounted(() => {

@@ -3,7 +3,7 @@
     <div 
       :class="[
         'p-3 rounded-lg max-w-full relative group',
-        isUser ? 'bg-blue-500 text-white' : 'bg-white border border-gray-200'
+        isUser ? 'bg-blue-500 text-white' : 'bg-white border border-gray-200 text-gray-700'
       ]"
     >
       <button

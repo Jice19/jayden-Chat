@@ -8,6 +8,7 @@ export const useChat = () => {
   const inputText = ref('')
   const chatList = ref<ChatMessage[]>([])
   const isSending = ref(false)
+  const isLoadingChat = ref(false) // 新增加载状态
   const abortController = ref<AbortController | null>(null)
   const api = useApi()
   const fallbackReply = 'jayden-chat罢工啦～请稍后再试'
@@ -15,17 +16,6 @@ export const useChat = () => {
   // 会话管理状态
   const currentSessionId = ref<string | null>(null)
   const sessionList = ref<Session[]>([])
-
-  const scrollToBottom = () => {
-    nextTick(() => {
-      setTimeout(() => {
-        const chatContainer = document.querySelector('.overflow-auto')
-        if (chatContainer) {
-          chatContainer.scrollTop = chatContainer.scrollHeight
-        }
-      }, 100)
-    })
-  }
 
   const loadSessionList = async () => {
     try {
@@ -41,8 +31,9 @@ export const useChat = () => {
   const switchSession = async (sessionId: string) => {
     if (currentSessionId.value === sessionId) return
     currentSessionId.value = sessionId
+    isLoadingChat.value = true // 开始加载
     await loadChatList()
-    scrollToBottom()
+    isLoadingChat.value = false // 结束加载
   }
 
   const createNewSession = () => {
@@ -116,7 +107,6 @@ export const useChat = () => {
     const savedAi = await saveMessage(fallbackReply, false)
     if (savedAi) {
       chatList.value.push(savedAi)
-      scrollToBottom()
     }
   }
 
@@ -133,7 +123,6 @@ export const useChat = () => {
     const savedUser = await saveMessage(userContent, true)
     if (savedUser) {
       chatList.value.push(savedUser)
-      scrollToBottom()
     }
 
     // 乐观更新：先在界面上显示一个空的 AI 消息
@@ -145,7 +134,6 @@ export const useChat = () => {
       createdAt: new Date().toISOString()
     }
     chatList.value.push(tempAiMsg)
-    scrollToBottom()
 
     // 完整的 AI 回复内容，用于最后保存
     let fullReply = ''
@@ -187,7 +175,6 @@ export const useChat = () => {
             const targetMsg = chatList.value.find(m => m.id === tempAiMsgId)
             if (targetMsg) {
               targetMsg.content = fullReply
-              scrollToBottom()
             }
           }
         } catch (e) {
@@ -232,7 +219,6 @@ export const useChat = () => {
       const savedAi = await saveMessage(fallbackReply, false)
       if (savedAi) {
         chatList.value.push(savedAi)
-        scrollToBottom()
       }
     }).finally(() => {
       if (abortController.value === controller) {
@@ -254,6 +240,7 @@ export const useChat = () => {
     inputText,
     chatList,
     isSending,
+    isLoadingChat, // 暴露加载状态
     sendMessage,
     abortSend,
     currentSessionId,
