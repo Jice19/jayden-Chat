@@ -1,0 +1,16 @@
+{
+  "projectName": "jayden-Chat",
+  "version": "1.0.0",
+  "description": "AI聊天应用，集成虚拟列表优化",
+  "profile": "standard",
+  "features": {
+    "virtualList": {
+      "enabled": true,
+      "description": "高性能虚拟列表组件"
+    },
+    "aiChat": {
+      "enabled": true,
+      "description": "基于阿里云通义千问的AI聊天功能"
+    }
+  }
+}
