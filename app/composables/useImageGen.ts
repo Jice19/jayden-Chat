@@ -3,8 +3,28 @@ import type { ImageGenResult, ImageGenRequest } from '../../types/image'
 
 export function useImageGen() {
   const isGenerating = ref(false)
+  const isLoadingHistory = ref(false)
   const error = ref<string | null>(null)
   const history = ref<ImageGenResult[]>([])
+  const total = ref(0)
+
+  const loadHistory = async (page = 1) => {
+    isLoadingHistory.value = true
+    try {
+      const res = await $fetch<{
+        success: boolean
+        items: ImageGenResult[]
+        total: number
+      }>('/api/image/list', { query: { page, pageSize: 20 } })
+
+      if (res.success) {
+        history.value = page === 1 ? res.items : [...history.value, ...res.items]
+        total.value = res.total
+      }
+    } finally {
+      isLoadingHistory.value = false
+    }
+  }
 
   const generate = async (req: ImageGenRequest) => {
     isGenerating.value = true
@@ -22,6 +42,7 @@ export function useImageGen() {
       }
 
       history.value.unshift(res.result)
+      total.value++
       return res.result
     } catch (e) {
       error.value = (e as Error).message
@@ -31,5 +52,5 @@ export function useImageGen() {
     }
   }
 
-  return { isGenerating, error, history, generate }
+  return { isGenerating, isLoadingHistory, error, history, total, loadHistory, generate }
 }

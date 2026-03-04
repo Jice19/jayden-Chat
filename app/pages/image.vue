@@ -16,19 +16,35 @@
 
       <!-- 历史记录列表 -->
       <div class="flex-1 overflow-y-auto p-2 space-y-2">
-        <p class="text-xs text-gray-400 px-2 pt-2">本次生成记录</p>
+        <p class="text-xs text-gray-400 px-2 pt-2">历史记录（{{ total }}）</p>
+
+        <div v-if="isLoadingHistory && history.length === 0" class="text-center py-8">
+          <p class="text-gray-400 text-sm">加载中...</p>
+        </div>
+
         <div
-          v-for="(item, i) in history"
-          :key="i"
-          class="cursor-pointer rounded-lg overflow-hidden border border-gray-100 hover:border-blue-200 transition-colors"
+          v-for="item in history"
+          :key="item.id"
+          class="cursor-pointer rounded-lg overflow-hidden border transition-colors"
+          :class="selected?.id === item.id ? 'border-blue-400' : 'border-gray-100 hover:border-blue-200'"
           @click="selected = item"
         >
           <img :src="item.url" class="w-full h-24 object-cover" alt="generated" />
           <div class="p-2 text-xs text-gray-500 truncate">{{ item.prompt }}</div>
         </div>
-        <div v-if="history.length === 0" class="text-center py-8">
+
+        <div v-if="history.length === 0 && !isLoadingHistory" class="text-center py-8">
           <p class="text-gray-400 text-sm">暂无生成记录</p>
         </div>
+
+        <button
+          v-if="history.length < total"
+          @click="loadMore"
+          :disabled="isLoadingHistory"
+          class="w-full py-2 text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
+        >
+          {{ isLoadingHistory ? '加载中...' : '加载更多' }}
+        </button>
       </div>
     </div>
 
@@ -130,11 +146,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useImageGen } from '~/composables/useImageGen'
 import type { ImageGenResult } from '../../types/image'
 
-const { isGenerating, error, history, generate } = useImageGen()
+const { isGenerating, isLoadingHistory, history, total, loadHistory, generate } = useImageGen()
+
+const currentPage = ref(1)
+const loadMore = async () => {
+  currentPage.value++
+  await loadHistory(currentPage.value)
+}
+
+onMounted(() => loadHistory(1))
 
 const prompt = ref('')
 const negativePrompt = ref('')

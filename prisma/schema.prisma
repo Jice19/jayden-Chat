@@ -22,3 +22,12 @@ model Chat {
   sessionId String?
   session   Session? @relation(fields: [sessionId], references: [id])
 }
+
+model GeneratedImage {
+  id             String   @id @default(cuid())
+  prompt         String
+  url            String
+  size           String
+  negativePrompt String?
+  createdAt      DateTime @default(now())
+}

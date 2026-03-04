@@ -6,6 +6,7 @@ export interface ImageGenRequest {
 }
 
 export interface ImageGenResult {
+  id?: string
   url: string
   prompt: string
   size: string
