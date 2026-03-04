@@ -16,8 +16,14 @@
           <span>🎨</span> AI 图片生成
         </NuxtLink>
         <NuxtLink
-          to="/virtual-list-demo"
+          to="/unified"
           class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm"
+        >
+          <span>✨</span> 统一智能助手
+        </NuxtLink>
+        <NuxtLink
+          to="/virtual-list-demo"
+          class="w-full bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm"
         >
           <span>🚀</span> 虚拟列表演示
         </NuxtLink>
