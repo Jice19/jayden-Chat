@@ -154,6 +154,7 @@
 import { ref, nextTick } from 'vue'
 import { useAvatar } from '~/composables/useAvatar'
 import { useApi } from '~/composables/useApi'
+import type { UnifiedResponse } from '~/../../types/unified'
 
 // ─── 类型定义 ─────────────────────────────────────────────────────────────────
 
@@ -204,13 +205,7 @@ async function onSend() {
 
   try {
     // 4. 调用统一 API（拦截器已返回 response.data，无需再取 .data）
-    const result = await axios.post('/chat/unified', { message: text }) as unknown as {
-      intent: 'text' | 'image' | 'both'
-      textReply: string
-      imageUrl: string
-      error: string
-    }
-    const { intent, textReply, imageUrl, error } = result
+    const { intent, textReply, imageUrl, error } = await axios.post<UnifiedResponse>('/chat/unified', { message: text }) as unknown as UnifiedResponse
 
     // 5. 更新 AI 消息
     messages.value[aiMsgIndex] = {

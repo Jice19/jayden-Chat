@@ -1,27 +1,15 @@
+import { getApiKey } from './get-api-key'
+
 // 封装阿里云通义千问 API 调用逻辑（使用全局 API Key）
 // 支持流式和非流式调用
 export async function callAliyunAI(
-  prompt: string, 
+  prompt: string,
   history: Array<{ role: string, content: string }> = [],
   stream = false
 ) {
-  // 1. 从 Nuxt 运行时配置读取全局变量
-  const config = useRuntimeConfig()
-  const rawKey = config.aliyunApiKey
-  const apiKey = String(rawKey)
-    .trim()
-    .replace(/[“”]/g, '"')
-    .replace(/^"+|"+$/g, '')
-    .replace(/[^\x20-\x7E]/g, '') // 过滤所有非可见 ASCII 字符
-  // 阿里云通义千问 OpenAI 兼容接口地址（固定）
+  const apiKey = getApiKey()
   const endpoint = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
-  // 模型名称
   const modelName = 'qwen-plus'
-
-  // 2. 校验 API Key 是否存在
-  if (!apiKey || apiKey.trim() === '') {
-    throw new Error('阿里云 API Key 未配置！请检查全局环境变量')
-  }
 
   // 构建消息列表：历史记录 + 当前提问
   const messages = [

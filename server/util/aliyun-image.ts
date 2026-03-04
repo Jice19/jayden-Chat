@@ -1,20 +1,11 @@
 import type { ImageGenRequest, ImageGenResult } from '../../types/image'
+import { getApiKey } from './get-api-key'
 
 const ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation'
 const MODEL = 'qwen-image-2.0'
 
 export async function generateImage(req: ImageGenRequest): Promise<ImageGenResult> {
-  const config = useRuntimeConfig()
-  const rawKey = config.aliyunApiKey
-  const apiKey = String(rawKey)
-    .trim()
-    .replace(/[""]/g, '"')
-    .replace(/^"+|"+$/g, '')
-    .replace(/[^\x20-\x7E]/g, '') // 过滤所有非可见 ASCII 字符
-
-  if (!apiKey) {
-    throw new Error('阿里云 API Key 未配置')
-  }
+  const apiKey = getApiKey()
 
   const size = req.size ?? '1024*1024'
 
