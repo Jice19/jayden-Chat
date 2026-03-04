@@ -9,7 +9,13 @@
         >
           <span>+</span> 新建对话
         </button>
-        <NuxtLink 
+        <NuxtLink
+          to="/image"
+          class="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm"
+        >
+          <span>🎨</span> AI 图片生成
+        </NuxtLink>
+        <NuxtLink
           to="/virtual-list-demo"
           class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm"
         >

@@ -12,7 +12,7 @@ export async function callAliyunAI(
     .trim()
     .replace(/[“”]/g, '"')
     .replace(/^"+|"+$/g, '')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[^\x20-\x7E]/g, '') // 过滤所有非可见 ASCII 字符
   // 阿里云通义千问 OpenAI 兼容接口地址（固定）
   const endpoint = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
   // 模型名称
