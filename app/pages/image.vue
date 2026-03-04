@@ -146,11 +146,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import { useImageGen } from '~/composables/useImageGen'
+import { useAuth } from '~/composables/useAuth'
 import type { ImageGenResult } from '../../types/image'
 
 const { isGenerating, isLoadingHistory, history, total, loadHistory, generate } = useImageGen()
+const { isLoggedIn } = useAuth()
 
 const currentPage = ref(1)
 const loadMore = async () => {
@@ -158,7 +160,10 @@ const loadMore = async () => {
   await loadHistory(currentPage.value)
 }
 
-onMounted(() => loadHistory(1))
+// 等登录完成后再加载，与 useChat 保持一致
+watch(isLoggedIn, (loggedIn) => {
+  if (loggedIn) loadHistory(1)
+}, { immediate: true })
 
 const prompt = ref('')
 const negativePrompt = ref('')
