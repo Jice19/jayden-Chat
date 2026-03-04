@@ -12,10 +12,7 @@
         <ChatItem
           :is-user="item.isUser"
           :content="item.content"
-          :class="[
-            'mb-4',
-            item.isUser ? 'ml-auto' : 'mr-auto'
-          ]"
+          :user-avatar="userAvatar"
         />
       </div>
     </template>
@@ -29,6 +26,7 @@ import type { ChatMessage } from '../../types/chat'
 interface Props {
   messages: ChatMessage[]
   autoScroll?: boolean
+  userAvatar?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
