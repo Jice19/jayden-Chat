@@ -1,16 +1,18 @@
 import { PrismaClient } from '@prisma/client'
 
-const prisma = global.prisma || new PrismaClient()
-if (process.env.NODE_ENV !== 'production') global.prisma = prisma
+const prisma = (global as any).prisma || new PrismaClient()
+if (process.env.NODE_ENV !== 'production') (global as any).prisma = prisma
 
 export default defineEventHandler(async (event) => {
   try {
     const body = await readBody(event).catch(() => ({}))
     const { title } = body || {}
 
+    const userId = event.context.user?.sub
     const session = await prisma.session.create({
       data: {
-        title: title || '新会话'
+        title: title || '新会话',
+        userId
       }
     })
 

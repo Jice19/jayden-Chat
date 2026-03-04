@@ -3,15 +3,20 @@
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>
+    <LoginModal />
   </div>
 </template>
 
 <script setup lang="ts">
-// 初始化主题
-const { initTheme } = useTheme()
+import LoginModal from '~/components/LoginModal.vue'
+import { useAuth } from '~/composables/useAuth'
 
-onMounted(() => {
+const { initTheme } = useTheme()
+const { restoreSession } = useAuth()
+
+onMounted(async () => {
   initTheme()
+  await restoreSession()
 })
 
 // 计算主题类名

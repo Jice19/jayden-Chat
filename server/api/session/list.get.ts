@@ -1,14 +1,14 @@
 import { PrismaClient } from '@prisma/client'
 
-const prisma = global.prisma || new PrismaClient()
-if (process.env.NODE_ENV !== 'production') global.prisma = prisma
+const prisma = (global as any).prisma || new PrismaClient()
+if (process.env.NODE_ENV !== 'production') (global as any).prisma = prisma
 
 export default defineEventHandler(async (event) => {
   try {
+    const userId = event.context.user?.sub
     const sessions = await prisma.session.findMany({
-      orderBy: {
-        createdAt: 'desc'
-      }
+      where: { userId },
+      orderBy: { createdAt: 'desc' }
     })
 
     return {

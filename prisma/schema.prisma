@@ -7,10 +7,20 @@ datasource db {
   url      = "postgresql://jayden:123456@localhost:5432/doubao_db?schema=public"
 }
 
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  sessions     Session[]
+}
+
 model Session {
   id        String   @id @default(cuid())
   title     String
   createdAt DateTime @default(now())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   chats     Chat[]
 }
 

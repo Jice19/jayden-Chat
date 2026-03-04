@@ -60,13 +60,16 @@
         </div>
       </div>
 
-      <!-- 用户头像上传区 -->
+      <!-- 用户信息区 -->
       <div class="p-4 border-t border-gray-100 flex-shrink-0">
         <div class="flex items-center gap-3">
+          <!-- 头像（可点击上传） -->
           <label class="relative cursor-pointer group flex-shrink-0" title="点击更换头像">
             <div class="w-10 h-10 rounded-full overflow-hidden ring-2 ring-offset-1 ring-blue-200 group-hover:ring-blue-500 transition-all">
               <img v-if="userAvatar" :src="userAvatar" alt="头像" class="w-full h-full object-cover" />
-              <div v-else class="w-full h-full bg-blue-500 flex items-center justify-center text-white text-sm font-bold select-none">U</div>
+              <div v-else class="w-full h-full bg-blue-500 flex items-center justify-center text-white text-sm font-bold select-none">
+                {{ authUser?.username?.[0]?.toUpperCase() || 'U' }}
+              </div>
             </div>
             <div class="absolute inset-0 rounded-full bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -76,12 +79,23 @@
             </div>
             <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden" @change="onAvatarChange" />
           </label>
+          <!-- 用户名 + 上传状态 -->
           <div class="flex-1 min-w-0">
-            <p class="text-xs font-medium text-gray-600 truncate">我的头像</p>
+            <p class="text-sm font-medium text-gray-700 truncate">{{ authUser?.username || '未登录' }}</p>
             <p v-if="uploadError" class="text-xs text-red-500 truncate">{{ uploadError }}</p>
             <p v-else-if="isUploading" class="text-xs text-blue-500">上传中...</p>
-            <p v-else class="text-xs text-gray-400">{{ userAvatar ? '点击更换' : '点击上传' }}</p>
+            <p v-else class="text-xs text-gray-400">{{ userAvatar ? '点击头像更换' : '点击头像上传' }}</p>
           </div>
+          <!-- 退出按钮 -->
+          <button
+            @click="logout"
+            title="退出登录"
+            class="flex-shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
         </div>
       </div>
     </div>
@@ -151,6 +165,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { useChat } from '~/composables/useChat'
 import { useAvatar } from '~/composables/useAvatar'
+import { useAuth } from '~/composables/useAuth'
 import ChatVirtualList from '~/components/ChatVirtualList.vue'
 import ConfirmModal from '~/components/ConfirmModal.vue'
 
@@ -158,6 +173,7 @@ const chatVirtualListRef = ref<InstanceType<typeof ChatVirtualList> | null>(null
 const confirmModalRef = ref<InstanceType<typeof ConfirmModal> | null>(null)
 
 const { userAvatar, isUploading, uploadError, uploadAvatar } = useAvatar()
+const { user: authUser, logout } = useAuth()
 
 const onAvatarChange = async (e: Event) => {
   const file = (e.target as HTMLInputElement).files?.[0]

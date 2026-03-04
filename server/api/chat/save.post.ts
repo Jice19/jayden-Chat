@@ -2,8 +2,8 @@
 import { PrismaClient } from '@prisma/client'
 
 // 解决 Nuxt 热更新时重复创建 Prisma 实例的问题（可选但推荐）
-const prisma = global.prisma || new PrismaClient()
-if (process.env.NODE_ENV !== 'production') global.prisma = prisma
+const prisma = (global as any).prisma || new PrismaClient()
+if (process.env.NODE_ENV !== 'production') (global as any).prisma = prisma
 // 打印全局变量，验证是否读取成功
   // console.log('全局 API Key：', process.env.ALIYUN_API_KEY) 
 
@@ -27,11 +27,10 @@ export default defineEventHandler(async (event) => {
     // 不过，为了健壮性，如果 AI 回复没带 ID，我们也可以暂时允许为空或者新建（虽然不合理）
     // 这里我们主要处理用户第一条消息自动建会话的逻辑
     if (!currentSessionId && isUser) {
+      const userId = event.context.user?.sub
       const title = content.trim().substring(0, 20)
       const newSession = await prisma.session.create({
-        data: {
-          title
-        }
+        data: { title, userId }
       })
       currentSessionId = newSession.id
     }

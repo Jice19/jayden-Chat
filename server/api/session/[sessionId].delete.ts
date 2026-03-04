@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 
-const prisma = global.prisma || new PrismaClient()
-if (process.env.NODE_ENV !== 'production') global.prisma = prisma
+const prisma = (global as any).prisma || new PrismaClient()
+if (process.env.NODE_ENV !== 'production') (global as any).prisma = prisma
 
 export default defineEventHandler(async (event) => {
   try {
@@ -15,19 +15,18 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // 删除与该会话关联的所有聊天记录
-    await prisma.chat.deleteMany({
-      where: {
-        sessionId: sessionId
-      }
-    })
+    const userId = event.context.user?.sub
 
-    // 删除会话本身
-    await prisma.session.delete({
-      where: {
-        id: sessionId
-      }
+    // 验证该会话属于当前用户
+    const session = await prisma.session.findFirst({
+      where: { id: sessionId, userId }
     })
+    if (!session) {
+      return { code: 404, success: false, message: '会话不存在或无权限' }
+    }
+
+    await prisma.chat.deleteMany({ where: { sessionId } })
+    await prisma.session.delete({ where: { id: sessionId } })
 
     return {
       code: 200,

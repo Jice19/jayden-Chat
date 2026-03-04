@@ -1,8 +1,8 @@
 import { PrismaClient } from '@prisma/client'
 
 // 全局单例模式
-const prisma = globalThis.prisma || new PrismaClient()
-if (process.env.NODE_ENV !== 'production') globalThis.prisma = prisma
+const prisma = (globalThis as any).prisma || new PrismaClient()
+if (process.env.NODE_ENV !== 'production') (globalThis as any).prisma = prisma
 
 export default defineEventHandler(async (event) => {
   try {

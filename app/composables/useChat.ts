@@ -1,8 +1,12 @@
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, watch } from 'vue'
 import { useApi } from './useApi'
+import { useAuth } from './useAuth'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
-import type { ApiResult, AiReplyResult } from '../../types/api'
+import type { ApiResult } from '../../types/api'
 import type { ChatMessage, Session } from '../../types/chat'
+
+const getToken = (): string =>
+  typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''
 
 export const useChat = () => {
   const inputText = ref('')
@@ -176,6 +180,7 @@ export const useChat = () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getToken()}`,
       },
       body: JSON.stringify({
         prompt: userContent,
@@ -262,13 +267,17 @@ export const useChat = () => {
     })
   }
 
-  onMounted(async () => {
+  const { isLoggedIn } = useAuth()
+
+  // 等登录完成（isLoggedIn 变为 true）再加载数据，解决 token 时序问题
+  watch(isLoggedIn, async (loggedIn) => {
+    if (!loggedIn) return
     await loadSessionList()
     if (sessionList.value.length > 0 && sessionList.value[0]) {
       currentSessionId.value = sessionList.value[0].id
     }
     await loadChatList()
-  })
+  }, { immediate: true })
 
   return {
     inputText,
