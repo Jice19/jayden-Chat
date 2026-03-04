@@ -4,12 +4,10 @@
     :items="chatMessages"
     :item-height="120"
     :buffer-size="3"
-    :scroll-to-bottom="shouldScrollToBottom"
     key-field="id"
     text-field="content"
-    @scroll="handleScroll"
   >
-    <template #default="{ item, index }">
+    <template #default="{ item }">
       <div class="chat-message-wrapper">
         <ChatItem
           :is-user="item.isUser"
@@ -38,38 +36,34 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const virtualListRef = ref()
-const shouldScrollToBottom = ref(false)
 
-// 转换消息格式以适配虚拟列表
+// 转换消息格式，用稳定 id 避免 Date.now() 每次 computed 重算时变化
 const chatMessages = computed(() => {
   return props.messages.map((message, index) => ({
     ...message,
-    id: message.id || `msg-${Date.now()}-${index}`,
-    index
+    id: message.id || `msg-${index}`,
   }))
 })
 
-// 监听新消息
+// 监听消息新增：有新消息时触底
 watch(() => props.messages.length, (newLength, oldLength) => {
-  if (newLength > oldLength && props.autoScroll) {
-    shouldScrollToBottom.value = true
-    nextTick(() => {
-      virtualListRef.value?.scrollToBottom()
-      shouldScrollToBottom.value = false
-    })
-  }
+  if (!props.autoScroll || newLength <= oldLength) return
+  nextTick(() => virtualListRef.value?.scrollToBottomIfAtBottom())
 })
 
-const handleScroll = (event: Event) => {
-  // 可以在这里添加滚动监听逻辑
-  // 比如判断是否滚动到底部等
-}
+// 监听最后一条消息的内容变化：处理 AI 流式输出（length 不变，只有 content 追加）
+// 只 deep watch 单个对象，不会产生 O(n) 开销
+watch(
+  () => props.messages[props.messages.length - 1]?.content,
+  () => {
+    if (!props.autoScroll) return
+    virtualListRef.value?.scrollToBottomIfAtBottom()
+  }
+)
 
 // 暴露方法给父组件
 defineExpose({
-  scrollToBottom: () => {
-    virtualListRef.value?.scrollToBottom()
-  }
+  scrollToBottom: () => virtualListRef.value?.scrollToBottom()
 })
 </script>
 

@@ -4,6 +4,11 @@
       ref="containerRef"
       class="virtual-list-container"
       @scroll="handleScroll"
+      @wheel="handleUserScrollStart"
+      @touchstart="handleUserScrollStart"
+      @touchend="handleUserScrollEnd"
+      @mousedown="handleUserScrollStart"
+      @mouseup="handleUserScrollEnd"
     >
       <div 
         class="virtual-list-phantom"
@@ -15,13 +20,13 @@
         :style="{ transform: `translateY(${offsetY}px)` }"
       >
         <div
-          v-for="item in visibleData"
+          v-for="{ item, index } in visibleData"
           :key="getItemKey(item)"
           class="virtual-list-item"
-          :data-index="getItemIndex(item)"
-          ref="itemRefs"
+          :data-index="index"
+          :ref="setItemRef"
         >
-          <slot :item="item" :index="getItemIndex(item)">
+          <slot :item="item" :index="index">
             {{ getItemText(item) }}
           </slot>
         </div>
@@ -31,7 +36,7 @@
 </template>
 
 <script setup lang="ts" generic="T">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 
 interface VirtualListProps<T> {
   items: T[]
@@ -62,20 +67,34 @@ const emit = defineEmits<{
 
 // 状态
 const containerRef = ref<HTMLElement>()
-const itemRefs = ref<HTMLElement[]>([])
+const itemRefs = new Map<number, HTMLElement>()
 const scrollTop = ref(0)
 const containerHeight = ref(0)
 const startIndex = ref(0)
 const positions = ref<Position[]>([])
+const isAtBottom = ref(true) // 是否在底部
+const userScrolling = ref(false) // 用户是否正在手动滚动
+
+// ResizeObserver 用于监听元素高度变化
+let resizeObserver: ResizeObserver | null = null
+
+// 设置 ref 的辅助函数
+const setItemRef = (el: any) => {
+  if (el) {
+    const index = parseInt(el.dataset.index)
+    itemRefs.set(index, el)
+    resizeObserver?.observe(el)
+  }
+}
+
+// 检查是否在底部（传入已读取的值，避免二次强制布局）
+const checkAtBottom = (scrollTopVal: number, scrollHeightVal: number, clientHeightVal: number) => {
+  isAtBottom.value = Math.abs(scrollHeightVal - scrollTopVal - clientHeightVal) < 20
+}
 
 // 获取项目key
 const getItemKey = (item: T): string => {
   return String((item as any)[props.keyField] || '')
-}
-
-// 获取项目索引
-const getItemIndex = (item: T): number => {
-  return props.items.indexOf(item)
 }
 
 // 获取项目文本
@@ -86,7 +105,7 @@ const getItemText = (item: T): string => {
 const initPositions = () => {
   positions.value = props.items.map((_, index) => ({
     index,
-    height: props.itemHeight, // 初始使用预估高度
+    height: props.itemHeight,
     top: index * props.itemHeight,
     bottom: (index + 1) * props.itemHeight,
   }))
@@ -134,9 +153,9 @@ const visibleRange = computed(() => {
   return { start, end }
 })
 
-const visibleData = computed(() => {
+const visibleData = computed<{ item: T; index: number }[]>(() => {
   const { start, end } = visibleRange.value
-  return props.items.slice(start, end + 1)
+  return props.items.slice(start, end + 1).map((item, i) => ({ item, index: start + i }))
 })
 
 const offsetY = computed(() => {
@@ -145,99 +164,146 @@ const offsetY = computed(() => {
     : 0
 })
 
-// 更新位置（动态高度校正）
-const updatePositions = () => {
-  nextTick(() => {
-    const nodes = itemRefs.value
-    if (!nodes || nodes.length === 0) return
-
-    // 如果数据长度发生变化，重新初始化positions
-    if (positions.value.length !== props.items.length) {
-      initPositions()
-      return
-    }
-
-    let diff = 0
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i]
-      if (!node) continue
-      
-      const index = parseInt(node.dataset?.index || '0')
-      const rect = node.getBoundingClientRect()
-      const realHeight = rect.height
-      
-      if (positions.value && positions.value[index]) {
-        const oldHeight = positions.value[index].height
-        const value = realHeight - oldHeight
-
-        if (value !== 0) {
-          positions.value[index].height = realHeight
-          positions.value[index].bottom = positions.value[index].top + realHeight
-          diff += value
-        }
+// 更新位置信息
+const updatePositions = (index: number, height: number) => {
+  if (!positions.value[index]) return
+  
+  const oldHeight = positions.value[index].height
+  const diff = height - oldHeight
+  
+  if (diff !== 0) {
+    positions.value[index].height = height
+    positions.value[index].bottom = positions.value[index].top + height
+    
+    // 更新后续所有节点
+    for (let i = index + 1; i < positions.value.length; i++) {
+      const prev = positions.value[i - 1]
+      const current = positions.value[i]
+      if (prev && current) {
+        current.top = prev.bottom
+        current.bottom = current.top + current.height
       }
     }
 
-    if (diff !== 0 && positions.value) {
-      // 从当前可见区域的下一个元素开始，调整后续元素的top和bottom
-      const start = visibleRange.value.start + nodes.length
-      for (let i = start; i < positions.value.length; i++) {
-        const position = positions.value[i]
-        if (position) {
-          position.top += diff
-          position.bottom += diff
-        }
-      }
+    // 智能追踪：如果之前在底部，且不是用户在滚动，则校正高度后继续触底
+    if (isAtBottom.value && !userScrolling.value) {
+      scrollToBottom()
     }
-  })
+  }
 }
 
 // 滚动处理
 const handleScroll = (event: Event) => {
-  requestAnimationFrame(() => {
-    const scrollTopValue = containerRef.value?.scrollTop ?? 0
-    const containerHeightValue = containerRef.value?.clientHeight ?? 0
-    
-    scrollTop.value = scrollTopValue
-    containerHeight.value = containerHeightValue
-    
-    startIndex.value = getStartIndex(scrollTopValue)
-    
-    updatePositions()
-    emit('scroll', event)
-  })
+  const container = containerRef.value
+  if (!container) return
+
+  // 一次性批量读取所有 DOM 属性，避免多次强制布局
+  const { scrollTop: st, scrollHeight: sh, clientHeight: ch } = container
+
+  scrollTop.value = st
+  containerHeight.value = ch
+  startIndex.value = getStartIndex(st)
+  checkAtBottom(st, sh, ch)
+  emit('scroll', event)
+}
+
+// 用户干预滚动的处理
+let scrollEndTimer: ReturnType<typeof setTimeout> | null = null
+const handleUserScrollStart = () => {
+  userScrolling.value = true
+  if (scrollEndTimer) clearTimeout(scrollEndTimer)
+  scrollEndTimer = setTimeout(() => {
+    userScrolling.value = false
+    const c = containerRef.value
+    if (c) checkAtBottom(c.scrollTop, c.scrollHeight, c.clientHeight)
+  }, 200)
+}
+
+const handleUserScrollEnd = () => {
+  if (scrollEndTimer) clearTimeout(scrollEndTimer)
+  scrollEndTimer = setTimeout(() => {
+    userScrolling.value = false
+    const c = containerRef.value
+    if (c) checkAtBottom(c.scrollTop, c.scrollHeight, c.clientHeight)
+  }, 150)
 }
 
 // 滚动到底部
 const scrollToBottom = () => {
+  // 乐观标记在底部：让 ResizeObserver 在 scroll 事件到达之前就能持续追踪
+  // 否则 nextTick+rAF 异步期间 isAtBottom 仍为 false，流式输出会脱轨
+  isAtBottom.value = true
   nextTick(() => {
     if (containerRef.value) {
-      containerRef.value.scrollTop = totalHeight.value
+      requestAnimationFrame(() => {
+        if (containerRef.value) {
+          containerRef.value.scrollTop = containerRef.value.scrollHeight
+        }
+      })
     }
   })
 }
 
-// 监听数据变化
-watch(() => props.items, () => {
-  initPositions()
-  if (props.scrollToBottom) {
-    scrollToBottom()
+// 仅监听 length 变化，避免 deep watch 对每次消息内容更新做 O(n) 深度比较
+watch(() => props.items.length, (newLen, oldLen) => {
+  if (newLen > oldLen) {
+    // 增量更新 positions
+    for (let i = oldLen; i < newLen; i++) {
+      const prevBottom = i > 0 ? (positions.value[i - 1]?.bottom || 0) : 0
+      positions.value[i] = {
+        index: i,
+        height: props.itemHeight,
+        top: prevBottom,
+        bottom: prevBottom + props.itemHeight
+      }
+    }
+  } else if (newLen < oldLen) {
+    // 数据减少，重新初始化
+    itemRefs.clear()
+    initPositions()
   }
-}, { deep: true, immediate: true })
 
-// 生命周期
-onMounted(() => {
-  initPositions()
-  containerHeight.value = containerRef.value?.clientHeight ?? 0
-  
-  if (props.scrollToBottom && props.items.length > 0) {
+  // 智能追踪：如果之前在底部，自动触底
+  if (isAtBottom.value && !userScrolling.value) {
     scrollToBottom()
   }
 })
 
 // 暴露方法
 defineExpose({
-  scrollToBottom
+  scrollToBottom,
+  scrollToBottomIfAtBottom: () => {
+    if (isAtBottom.value && !userScrolling.value) {
+      scrollToBottom()
+    }
+  }
+})
+
+onMounted(() => {
+  initPositions()
+  containerHeight.value = containerRef.value?.clientHeight ?? 0
+  
+  // 初始化 ResizeObserver
+  resizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const index = parseInt((entry.target as HTMLElement).dataset.index || '-1')
+      if (index !== -1) {
+        // 获取实际高度，这里使用 contentRect.height 或者 borderBoxSize
+        const height = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height
+        updatePositions(index, height)
+      }
+    }
+  })
+
+  if (props.scrollToBottom && props.items.length > 0) {
+    scrollToBottom()
+  }
+})
+
+onUnmounted(() => {
+  resizeObserver?.disconnect()
+  if (scrollEndTimer) clearTimeout(scrollEndTimer)
+  itemRefs.clear()
 })
 </script>
 
@@ -245,6 +311,7 @@ defineExpose({
 .virtual-list {
   width: 100%;
   height: 100%;
+  position: relative;
 }
 
 .virtual-list-container {
@@ -252,6 +319,8 @@ defineExpose({
   height: 100%;
   overflow-y: auto;
   position: relative;
+  -webkit-overflow-scrolling: touch;
+  will-change: transform;
 }
 
 .virtual-list-phantom {
@@ -267,9 +336,11 @@ defineExpose({
   top: 0;
   left: 0;
   right: 0;
+  will-change: transform;
 }
 
 .virtual-list-item {
   position: relative;
+  box-sizing: border-box;
 }
 </style>
