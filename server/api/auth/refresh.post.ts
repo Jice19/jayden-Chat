@@ -1,0 +1,32 @@
+import { verifyToken, signToken, signRefreshToken } from '../../util/jwt'
+
+export default defineEventHandler(async (event) => {
+  const { refreshToken } = await readBody(event)
+
+  if (!refreshToken) {
+    throw createError({ statusCode: 400, message: 'Refresh Token 不能为空' })
+  }
+
+  try {
+    const payload = await verifyToken(refreshToken)
+    
+    // 校验 token 类型
+    if (payload.type !== 'refresh') {
+      throw new Error('无效的 Token 类型')
+    }
+
+    // 生成新的 Access Token 和 Refresh Token (可选，通常 Refresh Token 也可以续期)
+    const newAccessToken = await signToken({ sub: payload.sub, username: payload.username })
+    const newRefreshToken = await signRefreshToken({ sub: payload.sub, username: payload.username })
+
+    return {
+      success: true,
+      data: {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken
+      }
+    }
+  } catch (e) {
+    throw createError({ statusCode: 401, message: 'Refresh Token 已过期或无效，请重新登录' })
+  }
+})

@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { hashPassword } from '../../util/password'
-import { signToken } from '../../util/jwt'
+import { signToken, signRefreshToken } from '../../util/jwt'
 
 const prisma = (global as any).prisma || new PrismaClient()
 if (process.env.NODE_ENV !== 'production') (global as any).prisma = prisma
@@ -28,12 +28,13 @@ export default defineEventHandler(async (event) => {
     data: { username, passwordHash }
   })
 
-  const token = await signToken({ sub: user.id, username: user.username })
+  const accessToken = await signToken({ sub: user.id, username: user.username })
+  const refreshToken = await signRefreshToken({ sub: user.id, username: user.username })
 
   return {
     code: 200,
     success: true,
     message: '注册成功',
-    data: { token, username: user.username }
+    data: { accessToken, refreshToken, username: user.username }
   }
 })
