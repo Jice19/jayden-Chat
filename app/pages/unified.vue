@@ -19,6 +19,59 @@
         <p>· "画/生成图片" → 生成图片</p>
         <p>· 两个都要 → 文字 + 图片同时返回</p>
       </div>
+
+      <div class="mt-3 px-2 text-xs text-[var(--color-text-disabled)] font-medium">性能设置</div>
+      <div class="px-3 py-3 rounded-lg bg-[var(--color-hover)] text-xs text-[var(--color-text-secondary)] space-y-3">
+        <div class="space-y-1">
+          <label class="block text-[var(--color-text-secondary)]">压测模式</label>
+          <select
+            :value="benchmarkMode"
+            class="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 text-xs text-[var(--color-text-primary)]"
+            @change="onBenchmarkModeChange"
+          >
+            <option value="optimized">optimized（复用单例）</option>
+            <option value="baseline">baseline（每次重建）</option>
+          </select>
+        </div>
+
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input
+            v-model="resetSingletons"
+            type="checkbox"
+            class="h-3.5 w-3.5 rounded border-[var(--color-border)]"
+          >
+          <span>重置时清空单例</span>
+        </label>
+
+        <div class="flex gap-2">
+          <button
+            class="flex-1 rounded-md border border-[var(--color-border)] px-2 py-1 hover:bg-[var(--color-surface)] disabled:opacity-60"
+            :disabled="isMetricsLoading"
+            @click="fetchMetrics"
+          >
+            {{ isMetricsLoading ? '刷新中...' : '刷新统计' }}
+          </button>
+          <button
+            class="flex-1 rounded-md bg-blue-600 px-2 py-1 text-white hover:bg-blue-700 disabled:opacity-60"
+            :disabled="isMetricsResetting"
+            @click="resetMetrics"
+          >
+            {{ isMetricsResetting ? '重置中...' : '重置统计' }}
+          </button>
+        </div>
+
+        <div v-if="metricsError" class="text-[11px] text-red-500">{{ metricsError }}</div>
+
+        <div v-if="metrics" class="space-y-1 text-[11px]">
+          <p>窗口开始：{{ formatTime(metrics.performance.windowStartedAt) }}</p>
+          <p>总请求：{{ metrics.performance.totalRequests }}（成功 {{ metrics.performance.successRequests }} / 失败 {{ metrics.performance.failedRequests }}）</p>
+          <p>整体均值：{{ formatMs(metrics.performance.averageDurationMs) }} / P95：{{ formatMs(metrics.performance.p95DurationMs) }}</p>
+          <p>baseline：{{ metrics.performance.modeSummary.baseline.requestCount }} 次，均值 {{ formatMs(metrics.performance.modeSummary.baseline.averageDurationMs) }}</p>
+          <p>optimized：{{ metrics.performance.modeSummary.optimized.requestCount }} 次，均值 {{ formatMs(metrics.performance.modeSummary.optimized.averageDurationMs) }}</p>
+          <p v-if="performanceReduction !== null">优化降幅：{{ performanceReduction }}%</p>
+          <p>图编译次数：{{ metrics.runtime.graphCompileCount }} · LLM 创建次数：{{ metrics.runtime.llmCreateCount }}</p>
+        </div>
+      </div>
     </div>
 
     <!-- 主区域 -->
@@ -151,10 +204,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
+import type { Event } from 'vue'
 import { useAvatar } from '~/composables/useAvatar'
 import { useApi } from '~/composables/useApi'
-import type { UnifiedResponse } from '~/../../types/unified'
+import { useUnifiedPerformance } from '~/composables/useUnifiedPerformance'
+import type { UnifiedBenchmarkMode, UnifiedResponse } from '~/../../types/unified'
 
 // ─── 类型定义 ─────────────────────────────────────────────────────────────────
 
@@ -177,6 +232,18 @@ const chatContainerRef = ref<HTMLElement | null>(null)
 
 const { userAvatar } = useAvatar()
 const axios = useApi()
+const {
+  benchmarkMode,
+  metrics,
+  isMetricsLoading,
+  isMetricsResetting,
+  metricsError,
+  resetSingletons,
+  performanceReduction,
+  setBenchmarkMode,
+  fetchMetrics,
+  resetMetrics
+} = useUnifiedPerformance()
 
 const intentLabel: Record<string, string> = {
   text: '💬 文字回答',
@@ -205,7 +272,15 @@ async function onSend() {
 
   try {
     // 4. 调用统一 API（拦截器已返回 response.data，无需再取 .data）
-    const { intent, textReply, imageUrl, error } = await axios.post<UnifiedResponse>('/chat/unified', { message: text }) as unknown as UnifiedResponse
+    const { intent, textReply, imageUrl, error } = await axios.post<UnifiedResponse>(
+      '/chat/unified',
+      { message: text },
+      {
+        headers: {
+          'x-unified-benchmark-mode': benchmarkMode.value
+        }
+      }
+    ) as unknown as UnifiedResponse
 
     // 5. 更新 AI 消息
     messages.value[aiMsgIndex] = {
@@ -226,9 +301,27 @@ async function onSend() {
     }
   } finally {
     isSending.value = false
+    await fetchMetrics()
     await nextTick()
     scrollToBottom()
   }
+}
+
+function onBenchmarkModeChange(event: Event) {
+  const target = event.target as HTMLSelectElement | null
+  if (!target) return
+  if (target.value === 'baseline' || target.value === 'optimized') {
+    setBenchmarkMode(target.value as UnifiedBenchmarkMode)
+  }
+}
+
+function formatMs(value: number): string {
+  return `${value.toFixed(2)}ms`
+}
+
+function formatTime(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString()
 }
 
 function scrollToBottom() {
@@ -236,4 +329,8 @@ function scrollToBottom() {
     chatContainerRef.value.scrollTop = chatContainerRef.value.scrollHeight
   }
 }
+
+onMounted(() => {
+  fetchMetrics()
+})
 </script>

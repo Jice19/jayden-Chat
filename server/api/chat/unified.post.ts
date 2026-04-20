@@ -17,6 +17,7 @@
 import { runUnifiedGraph } from '../../util/unified-graph'
 import { PrismaClient } from '@prisma/client'
 import { verifyToken } from '../../util/jwt'
+import { startUnifiedRequestTimer } from '../../util/unified-performance'
 
 const prisma = (global as any).__prisma || new PrismaClient()
 if (process.env.NODE_ENV !== 'production') (global as any).__prisma = prisma
@@ -58,8 +59,47 @@ export default defineEventHandler(async (event) => {
     }))
   }
 
+  const benchmarkMode = getHeader(event, 'x-unified-benchmark-mode') === 'baseline'
+    ? 'baseline'
+    : 'optimized'
+  const useSingletons = benchmarkMode === 'optimized'
+
+  const timer = startUnifiedRequestTimer({
+    messageLength: message.trim().length,
+    historyLength: history.length,
+    mode: benchmarkMode
+  })
+  const consoleLabel = `[unified] request#${timer.requestId}`
+  console.time(consoleLabel)
+
   // 4. 调用 LangGraph 统一图
-  const result = await runUnifiedGraph(message, history)
+  let result: Awaited<ReturnType<typeof runUnifiedGraph>>
+  try {
+    result = await runUnifiedGraph(message, history, {
+      reuseCompiledGraph: useSingletons,
+      reuseLLM: useSingletons
+    })
+  } catch (error) {
+    const durationMs = timer.end({
+      success: false,
+      errorMessage: (error as Error).message
+    })
+    console.timeEnd(consoleLabel)
+    console.log(
+      `[unified] request#${timer.requestId} mode=${benchmarkMode} duration=${durationMs}ms success=false`
+    )
+    throw error
+  }
+
+  const durationMs = timer.end({
+    intent: result.intent,
+    success: !result.error,
+    errorMessage: result.error || undefined
+  })
+  console.timeEnd(consoleLabel)
+  console.log(
+    `[unified] request#${timer.requestId} mode=${benchmarkMode} duration=${durationMs}ms intent=${result.intent} success=${!result.error}`
+  )
 
   // 5. 如果登录了且有 sessionId，保存记录到数据库
   if (userId && sessionId && !result.error) {

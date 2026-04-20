@@ -7,6 +7,7 @@ import { getApiKey } from './get-api-key'
 
 const GraphState = Annotation.Root({
   userMessage: Annotation<string>({ reducer: (_, b) => b }),
+  reuseLLM: Annotation<boolean>({ reducer: (_, b) => b, default: () => true }),
   intent: Annotation<'text' | 'image' | 'both'>({ reducer: (_, b) => b }),
   history: Annotation<Array<{ role: string; content: string }>>({
     reducer: (_, b) => b,
@@ -23,10 +24,16 @@ export type UnifiedState = typeof GraphState.State
 // ─── 2. 图编译单例（避免重复编译，提升性能） ─────────────────────────────────
 
 let _compiledGraph: ReturnType<typeof buildGraph> | null = null
+let _graphCompileCount = 0
+
+function compileGraph() {
+  _graphCompileCount += 1
+  return buildGraph()
+}
 
 function getCompiledGraph() {
   if (!_compiledGraph) {
-    _compiledGraph = buildGraph()
+    _compiledGraph = compileGraph()
   }
   return _compiledGraph
 }
@@ -45,10 +52,25 @@ function createLLM() {
   })
 }
 
+function createLLMInstance() {
+  _llmCreateCount += 1
+  return createLLM()
+}
+
+let _llmInstance: ChatOpenAI | null = null
+let _llmCreateCount = 0
+
+function getLLM() {
+  if (!_llmInstance) {
+    _llmInstance = createLLMInstance()
+  }
+  return _llmInstance
+}
+
 // ─── 4. 节点函数 ──────────────────────────────────────────────────────────────
 
 async function routerNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
-  const llm = createLLM()
+  const llm = state.reuseLLM ? getLLM() : createLLMInstance()
 
   const systemPrompt = `你是一个意图分析助手。分析用户消息，用 JSON 格式返回：
 {
@@ -85,7 +107,7 @@ async function routerNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
 }
 
 async function textNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
-  const llm = createLLM()
+  const llm = state.reuseLLM ? getLLM() : createLLMInstance()
 
   const messages: Array<{ role: string; content: string }> = [
     { role: 'system', content: '你是一个乐于助人的 AI 助手。' },
@@ -165,24 +187,19 @@ function routeFromText(state: UnifiedState): string {
 
 function buildGraph() {
   const graph = new StateGraph(GraphState)
-
-  graph.addNode('router', routerNode)
-  graph.addNode('text', textNode)
-  graph.addNode('image', imageNode)
-
-  graph.addEdge('__start__', 'router')
-
-  graph.addConditionalEdges('router', routeFromRouter, {
-    text: 'text',
-    image: 'image'
-  })
-
-  graph.addConditionalEdges('text', routeFromText, {
-    image: 'image',
-    __end__: END
-  })
-
-  graph.addEdge('image', END)
+    .addNode('router', routerNode)
+    .addNode('text', textNode)
+    .addNode('image', imageNode)
+    .addEdge('__start__', 'router')
+    .addConditionalEdges('router', routeFromRouter, {
+      text: 'text',
+      image: 'image'
+    })
+    .addConditionalEdges('text', routeFromText, {
+      image: 'image',
+      __end__: END
+    })
+    .addEdge('image', END)
 
   return graph.compile()
 }
@@ -191,14 +208,42 @@ function buildGraph() {
 
 export async function runUnifiedGraph(
   userMessage: string,
-  history: Array<{ role: string; content: string }> = []
+  history: Array<{ role: string; content: string }> = [],
+  options?: {
+    reuseCompiledGraph?: boolean
+    reuseLLM?: boolean
+  }
 ): Promise<UnifiedResponse> {
-  const app = getCompiledGraph()
-  const result = await app.invoke({ userMessage, history })
+  const reuseCompiledGraph = options?.reuseCompiledGraph ?? true
+  const reuseLLM = options?.reuseLLM ?? true
+  const app = reuseCompiledGraph ? getCompiledGraph() : compileGraph()
+  const result = await app.invoke({ userMessage, history, reuseLLM })
   return {
     intent: result.intent,
     textReply: result.textReply,
     imageUrl: result.imageUrl,
     error: result.error
+  }
+}
+
+export interface UnifiedGraphRuntimeStats {
+  graphCompileCount: number
+  llmCreateCount: number
+}
+
+export function getUnifiedGraphRuntimeStats(): UnifiedGraphRuntimeStats {
+  return {
+    graphCompileCount: _graphCompileCount,
+    llmCreateCount: _llmCreateCount
+  }
+}
+
+export function resetUnifiedGraphRuntimeStats(options?: { resetSingletons?: boolean }) {
+  _graphCompileCount = 0
+  _llmCreateCount = 0
+
+  if (options?.resetSingletons) {
+    _compiledGraph = null
+    _llmInstance = null
   }
 }
