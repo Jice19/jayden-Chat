@@ -6,7 +6,10 @@
     "fileHash": "73ab2bf0b88da4cbce30a5bd8ce4044a5e4868e9a544064e789800238f291884",
     "size": 28154,
     "ext": "md",
-    "uploadedAt": "2026-04-20T07:19:00.997Z"
+    "uploadedAt": "2026-04-20T07:19:00.997Z",
+    "indexStatus": "READY",
+    "indexedAt": "2026-04-20T07:47:51.789Z",
+    "indexError": ""
   },
   {
     "id": "1776669559463-d68e6593-笔记.md",
@@ -15,6 +18,9 @@
     "fileHash": "1906787c7430edb3f15edccebe5fd63993591376a5877225658b4cde60a96cfc",
     "size": 174540,
     "ext": "md",
-    "uploadedAt": "2026-04-20T07:19:19.463Z"
+    "uploadedAt": "2026-04-20T07:19:19.463Z",
+    "indexStatus": "READY",
+    "indexedAt": "2026-04-20T07:47:51.784Z",
+    "indexError": ""
   }
 ]

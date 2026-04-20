@@ -1,4 +1,5 @@
 import { listRagDocuments } from '../../../util/rag-kb-store'
+import { getIndexedDocumentIds } from '../../../util/rag-index'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.user?.sub as string | undefined
@@ -7,11 +8,19 @@ export default defineEventHandler(async (event) => {
   }
 
   const docs = await listRagDocuments(userId)
+  const indexedDocumentIds = await getIndexedDocumentIds(userId)
+  const normalizedDocs = docs.map((doc) => {
+    if (doc.indexStatus) return doc
+    return {
+      ...doc,
+      indexStatus: indexedDocumentIds.has(doc.id) ? 'READY' : 'PENDING'
+    }
+  })
 
   return {
     code: 200,
     success: true,
     message: '获取文档列表成功',
-    data: docs
+    data: normalizedDocs
   }
 })

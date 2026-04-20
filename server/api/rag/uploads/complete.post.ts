@@ -9,6 +9,7 @@ import {
   mergeChunksToTempFile,
   saveUploadSession
 } from '../../../util/rag-kb-store'
+import { ingestDocumentToRag } from '../../../util/rag-index'
 
 interface CompleteBody {
   uploadId: string
@@ -55,6 +56,9 @@ export default defineEventHandler(async (event) => {
     const storedName = buildStoredFileName(session.fileName)
     const document = await finalizeUpload(session, storedName, ext)
     await cleanupUploadChunks(userId, uploadId)
+    ingestDocumentToRag(userId, document).catch((ingestError) => {
+      console.error('RAG 文档入库失败:', ingestError)
+    })
 
     return {
       code: 200,

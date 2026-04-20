@@ -9,6 +9,7 @@ import {
   normalizeExt
 } from '../../../util/rag-upload'
 import { getFinalFilePath, upsertRagDocument } from '../../../util/rag-kb-store'
+import { ingestDocumentToRag } from '../../../util/rag-index'
 
 interface UploadResponse {
   id: string
@@ -57,14 +58,19 @@ export default defineEventHandler(async (event) => {
   const fileHash = createHash('sha256').update(filePart.data).digest('hex')
   const ext = normalizeExt(filePart.filename).replace('.', '')
 
-  await upsertRagDocument(userId, {
+  const doc = {
     id: storedName,
     originalName: filePart.filename,
     storedName,
     fileHash,
     size: filePart.data.byteLength,
     ext,
-    uploadedAt: new Date().toISOString()
+    uploadedAt: new Date().toISOString(),
+    indexStatus: 'PENDING' as const
+  }
+  await upsertRagDocument(userId, doc)
+  ingestDocumentToRag(userId, doc).catch((error) => {
+    console.error('RAG 文档入库失败:', error)
   })
 
   const payload: UploadResponse = {

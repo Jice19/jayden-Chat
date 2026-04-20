@@ -38,6 +38,13 @@
           >
             刷新列表
           </button>
+          <button
+            class="rounded-md border border-[var(--color-border)] px-4 py-1.5 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-hover)] disabled:opacity-60"
+            :disabled="reindexing"
+            @click="reindexDocuments"
+          >
+            {{ reindexing ? '重建中...' : '重建索引' }}
+          </button>
         </div>
 
         <p v-if="selectedFile" class="mt-2 text-xs text-[var(--color-text-secondary)]">
@@ -65,6 +72,7 @@
             <thead>
               <tr class="border-b border-[var(--color-border)] text-[var(--color-text-secondary)]">
                 <th class="px-2 py-2">文件名</th>
+                <th class="px-2 py-2">索引状态</th>
                 <th class="px-2 py-2">格式</th>
                 <th class="px-2 py-2">大小</th>
                 <th class="px-2 py-2">上传时间</th>
@@ -77,12 +85,55 @@
                 class="border-b border-[var(--color-border)] text-[var(--color-text-primary)]"
               >
                 <td class="px-2 py-2">{{ doc.originalName }}</td>
+                <td class="px-2 py-2">{{ doc.indexStatus || 'PENDING' }}</td>
                 <td class="px-2 py-2">{{ doc.ext || '-' }}</td>
                 <td class="px-2 py-2">{{ formatBytes(doc.size) }}</td>
                 <td class="px-2 py-2">{{ formatTime(doc.uploadedAt) }}</td>
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+        <h2 class="text-base font-medium text-[var(--color-text-primary)]">RAG 问答测试</h2>
+        <div class="mt-3 space-y-3">
+          <textarea
+            v-model="question"
+            rows="4"
+            class="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] p-3 text-sm text-[var(--color-text-primary)]"
+            placeholder="输入问题，例如：请基于我上传的 Vue 笔记，总结 reactive 和 ref 的区别"
+          />
+          <div class="flex items-center gap-2">
+            <select
+              v-model="askMode"
+              class="rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1 text-sm text-[var(--color-text-primary)]"
+            >
+              <option value="qa">问答</option>
+              <option value="review">复盘</option>
+              <option value="summary">总结</option>
+            </select>
+            <button
+              class="rounded-md bg-blue-600 px-4 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-60"
+              :disabled="asking || !question.trim()"
+              @click="askRag"
+            >
+              {{ asking ? '生成中...' : '提问' }}
+            </button>
+          </div>
+
+          <p v-if="askError" class="text-xs text-red-500">{{ askError }}</p>
+          <div v-if="answer" class="rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] p-3">
+            <p class="whitespace-pre-wrap text-sm text-[var(--color-text-primary)]">{{ answer }}</p>
+            <div v-if="references.length" class="mt-3 border-t border-[var(--color-border)] pt-2">
+              <p class="text-xs text-[var(--color-text-secondary)]">引用来源：</p>
+              <ul class="mt-1 space-y-1 text-xs text-[var(--color-text-secondary)]">
+                <li v-for="(refItem, idx) in references" :key="`${refItem.documentId}-${idx}`">
+                  [{{ idx + 1 }}] {{ refItem.title }}#{{ refItem.chunkIndex }} - {{ refItem.snippet }}
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -100,6 +151,8 @@ interface RagDocumentItem {
   size: number
   ext: string
   uploadedAt: string
+  indexStatus?: 'PENDING' | 'READY' | 'FAILED'
+  indexError?: string
 }
 
 interface RagDocumentsResponse {
@@ -115,11 +168,18 @@ const selectedFile = ref<File | null>(null)
 const documents = ref<RagDocumentItem[]>([])
 const loading = ref(false)
 const uploading = ref(false)
+const asking = ref(false)
+const reindexing = ref(false)
 const hashProgress = ref(0)
 const uploadProgress = ref(0)
 const stageText = ref('上传中...')
 const errorMsg = ref('')
 const successMsg = ref('')
+const question = ref('')
+const askMode = ref<'qa' | 'review' | 'summary'>('qa')
+const answer = ref('')
+const askError = ref('')
+const references = ref<Array<{ documentId: string; title: string; chunkIndex: number; snippet: string }>>([])
 
 const CHUNK_SIZE = 5 * 1024 * 1024
 const MAX_CONCURRENCY = 3
@@ -238,6 +298,63 @@ async function uploadSelectedFile() {
   } finally {
     uploading.value = false
     stageText.value = '上传中...'
+  }
+}
+
+async function askRag() {
+  if (!question.value.trim() || asking.value) return
+  asking.value = true
+  askError.value = ''
+  answer.value = ''
+  references.value = []
+  try {
+    const res = (await api.post('/rag/ask', {
+      question: question.value.trim(),
+      mode: askMode.value,
+      topK: 5
+    })) as unknown as {
+      success: boolean
+      message: string
+      data: {
+        answer: string
+        references: Array<{ documentId: string; title: string; chunkIndex: number; snippet: string }>
+      }
+    }
+    if (!res.success) {
+      throw new Error(res.message || '提问失败')
+    }
+    answer.value = res.data.answer
+    references.value = res.data.references || []
+  } catch (error) {
+    askError.value = `提问失败：${(error as Error).message}`
+  } finally {
+    asking.value = false
+  }
+}
+
+async function reindexDocuments() {
+  if (reindexing.value) return
+  reindexing.value = true
+  errorMsg.value = ''
+  successMsg.value = ''
+  try {
+    const res = (await api.post('/rag/documents/reindex')) as unknown as {
+      success: boolean
+      message: string
+      data?: { total: number; success: number; failed: number }
+    }
+    if (!res.success) {
+      throw new Error(res.message || '重建失败')
+    }
+    const total = res.data?.total ?? 0
+    const success = res.data?.success ?? 0
+    const failed = res.data?.failed ?? 0
+    successMsg.value = `索引重建完成：总计 ${total}，成功 ${success}，失败 ${failed}`
+    await loadDocuments()
+  } catch (error) {
+    errorMsg.value = `重建索引失败：${(error as Error).message}`
+  } finally {
+    reindexing.value = false
   }
 }
 

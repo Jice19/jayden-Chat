@@ -6,7 +6,7 @@ import type { ApiResult } from '../../types/api'
 import type { ChatMessage, Session } from '../../types/chat'
 
 const getToken = (): string =>
-  typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''
+  typeof window !== 'undefined' ? localStorage.getItem('auth_access_token') || '' : ''
 
 export const useChat = () => {
   const inputText = ref('')

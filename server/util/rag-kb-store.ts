@@ -19,6 +19,9 @@ export interface RagStoredDocument {
   size: number
   ext: string
   uploadedAt: string
+  indexStatus?: 'PENDING' | 'READY' | 'FAILED'
+  indexedAt?: string
+  indexError?: string
 }
 
 export interface RagUploadSession {
@@ -247,7 +250,9 @@ export async function finalizeUpload(
     fileHash: session.fileHash,
     size: session.fileSize,
     ext,
-    uploadedAt: new Date().toISOString()
+    uploadedAt: new Date().toISOString(),
+    indexStatus: 'PENDING',
+    indexError: ''
   }
   await upsertRagDocument(session.userId, doc)
 
