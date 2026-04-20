@@ -145,6 +145,7 @@
 
               <!-- 文字回复 -->
               <p v-if="msg.textReply" class="whitespace-pre-wrap">{{ msg.textReply }}</p>
+              <p v-if="msg.streaming" class="text-xs text-[var(--color-text-disabled)] mt-1">输出中...</p>
 
               <!-- 图片回复 -->
               <div v-if="msg.imageUrl" :class="msg.textReply ? 'mt-3' : ''">
@@ -160,6 +161,13 @@
                 >
                   下载图片
                 </a>
+              </div>
+
+              <!-- 图片占位符 -->
+              <div v-else-if="msg.imageLoading" :class="msg.textReply ? 'mt-3' : ''" class="w-full max-w-sm">
+                <div class="h-52 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-hover)] animate-pulse flex items-center justify-center text-xs text-[var(--color-text-disabled)]">
+                  图片生成中...
+                </div>
               </div>
             </template>
           </div>
@@ -217,9 +225,11 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   content: string          // 用户消息内容
   loading?: boolean        // AI 消息是否正在加载
+  streaming?: boolean      // 文字是否正在“流式”展示
   intent?: 'text' | 'image' | 'both'
   textReply?: string
   imageUrl?: string
+  imageLoading?: boolean   // 图片是否正在等待展示
   error?: string
 }
 
@@ -264,7 +274,13 @@ async function onSend() {
 
   // 2. 添加 AI 占位消息（加载动画）
   const aiMsgIndex = messages.value.length
-  messages.value.push({ role: 'assistant', content: '', loading: true })
+  messages.value.push({
+    role: 'assistant',
+    content: '',
+    loading: true,
+    streaming: false,
+    imageLoading: false
+  })
 
   // 3. 滚动到底部
   await nextTick()
@@ -282,21 +298,42 @@ async function onSend() {
       }
     ) as unknown as UnifiedResponse
 
-    // 5. 更新 AI 消息
+    const shouldShowImagePlaceholder = intent === 'image' || intent === 'both'
     messages.value[aiMsgIndex] = {
       role: 'assistant',
-      content: textReply || '',
+      content: '',
       loading: false,
+      streaming: Boolean(textReply),
       intent,
-      textReply,
-      imageUrl,
+      textReply: '',
+      imageUrl: '',
+      imageLoading: shouldShowImagePlaceholder,
       error
+    }
+
+    if (textReply) {
+      await streamTextReply(aiMsgIndex, textReply)
+    }
+
+    if (imageUrl) {
+      const targetMsg = messages.value[aiMsgIndex]
+      if (targetMsg) {
+        targetMsg.imageUrl = imageUrl
+        targetMsg.imageLoading = false
+      }
+    } else if (shouldShowImagePlaceholder) {
+      const targetMsg = messages.value[aiMsgIndex]
+      if (targetMsg) {
+        targetMsg.imageLoading = false
+      }
     }
   } catch (err: unknown) {
     messages.value[aiMsgIndex] = {
       role: 'assistant',
       content: '',
       loading: false,
+      streaming: false,
+      imageLoading: false,
       error: `请求失败：${(err as Error).message}`
     }
   } finally {
@@ -305,6 +342,33 @@ async function onSend() {
     await nextTick()
     scrollToBottom()
   }
+}
+
+async function streamTextReply(messageIndex: number, fullText: string): Promise<void> {
+  const chunkSize = 3
+  const intervalMs = 20
+  let cursor = 0
+
+  while (cursor < fullText.length) {
+    const targetMsg = messages.value[messageIndex]
+    if (!targetMsg) return
+
+    cursor = Math.min(cursor + chunkSize, fullText.length)
+    targetMsg.textReply = fullText.slice(0, cursor)
+    targetMsg.content = targetMsg.textReply
+    await wait(intervalMs)
+  }
+
+  const targetMsg = messages.value[messageIndex]
+  if (targetMsg) {
+    targetMsg.streaming = false
+  }
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
 }
 
 function onBenchmarkModeChange(event: Event) {
