@@ -97,9 +97,15 @@ async function routerNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
       .replace(/```\n?/g, '')
       .trim()
     const parsed = JSON.parse(raw)
+    const intent = parsed?.intent
+    const safeIntent: UnifiedState['intent'] =
+      intent === 'text' || intent === 'image' || intent === 'both' ? intent : 'text'
+    const safeImagePrompt =
+      typeof parsed?.imagePrompt === 'string' ? parsed.imagePrompt.trim() : ''
+
     return {
-      intent: parsed.intent ?? 'text',
-      imagePrompt: parsed.imagePrompt ?? state.userMessage
+      intent: safeIntent,
+      imagePrompt: safeImagePrompt || state.userMessage
     }
   } catch {
     return { intent: 'text', imagePrompt: '' }
@@ -124,12 +130,12 @@ async function textNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
 }
 
 async function imageNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
-  const prompt = state.imagePrompt || state.userMessage
+  const promptFromState = typeof state.imagePrompt === 'string' ? state.imagePrompt.trim() : ''
+  const prompt = promptFromState || state.userMessage.trim()
 
   try {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 120000)
-
     const response = await fetch(
       'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
       {
@@ -146,11 +152,11 @@ async function imageNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
         signal: controller.signal
       }
     )
-
     clearTimeout(timeoutId)
 
     if (!response.ok) {
-      throw new Error(`API 返回错误: ${response.status}`)
+      const errorBody = await response.text().catch(() => '')
+      throw new Error(`API 返回错误: ${response.status}${errorBody ? ` - ${errorBody}` : ''}`)
     }
 
     const data = await response.json() as {
