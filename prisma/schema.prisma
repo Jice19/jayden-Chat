@@ -41,3 +41,21 @@ model GeneratedImage {
   negativePrompt String?
   createdAt      DateTime @default(now())
 }
+
+model RagDocument {
+  id           String   @id
+  userId       String   @map("user_id")
+  originalName String   @map("original_name")
+  storedName   String   @map("stored_name")
+  fileHash     String   @map("file_hash")
+  size         BigInt
+  ext          String
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+  indexStatus  String   @default("PENDING") @map("index_status")
+  indexedAt    DateTime? @map("indexed_at")
+  indexError   String   @default("") @map("index_error")
+
+  @@index([userId, uploadedAt(sort: Desc)])
+  @@unique([userId, fileHash, size])
+  @@map("rag_documents")
+}

@@ -9,13 +9,10 @@ export default defineEventHandler(async (event) => {
 
   const docs = await listRagDocuments(userId)
   const indexedDocumentIds = await getIndexedDocumentIds(userId)
-  const normalizedDocs = docs.map((doc) => {
-    if (doc.indexStatus) return doc
-    return {
-      ...doc,
-      indexStatus: indexedDocumentIds.has(doc.id) ? 'READY' : 'PENDING'
-    }
-  })
+  const normalizedDocs = docs.map((doc) => ({
+    ...doc,
+    indexStatus: indexedDocumentIds.has(doc.id) ? 'READY' : 'PENDING'
+  }))
 
   return {
     code: 200,

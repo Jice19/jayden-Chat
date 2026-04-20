@@ -1,0 +1,17 @@
+{
+  "id": "be7b4494-e2d0-41ad-b0e1-81aa41a30166",
+  "userId": "cmng31xq70000r9yafzz8b4l5",
+  "fileName": "笔记.md",
+  "fileHash": "1906787c7430edb3f15edccebe5fd63993591376a5877225658b4cde60a96cfc",
+  "fileSize": 174540,
+  "chunkSize": 5242880,
+  "totalChunks": 1,
+  "uploadedChunkIndexes": [
+    0
+  ],
+  "status": "FAILED",
+  "expiresAt": "2026-04-21T08:17:21.561Z",
+  "createdAt": "2026-04-20T08:17:21.561Z",
+  "updatedAt": "2026-04-20T08:17:21.605Z",
+  "errorMessage": "\nInvalid `prisma.$executeRawUnsafe()` invocation:\n\n\nRaw query failed. Code: `23505`. Message: `Key (user_id, file_hash, size)=(cmng31xq70000r9yafzz8b4l5, 1906787c7430edb3f15edccebe5fd63993591376a5877225658b4cde60a96cfc, 174540) already exists.`"
+}

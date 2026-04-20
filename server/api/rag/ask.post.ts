@@ -1,5 +1,10 @@
 import { ChatOpenAI } from '@langchain/openai'
-import { buildRagContext, ingestDocumentToRag, searchRagChunks } from '../../util/rag-index'
+import {
+  buildRagContext,
+  getIndexedDocumentIds,
+  ingestDocumentToRag,
+  searchRagChunks
+} from '../../util/rag-index'
 import { getApiKey } from '../../util/get-api-key'
 import { listRagDocuments } from '../../util/rag-kb-store'
 
@@ -63,8 +68,9 @@ export default defineEventHandler(async (event) => {
     const docs = await listRagDocuments(userId)
     const candidates = docs.filter((doc) => doc.ext === 'md' || doc.ext === 'txt')
     if (candidates.length > 0) {
+      const indexedIds = await getIndexedDocumentIds(userId)
       for (const doc of candidates) {
-        if (doc.indexStatus === 'READY') continue
+        if (indexedIds.has(doc.id)) continue
         try {
           await ingestDocumentToRag(userId, doc)
         } catch {

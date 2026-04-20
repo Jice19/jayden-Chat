@@ -1,0 +1,16 @@
+{
+  "id": "b31bff7a-92b1-4a4c-9f57-96015c1619a5",
+  "userId": "cmng31xq70000r9yafzz8b4l5",
+  "fileName": "问题回复.md",
+  "fileHash": "23f9972170316a79f74ed12ee432c16e08a920270ba09b190bc3e6828657f30f",
+  "fileSize": 6280,
+  "chunkSize": 5242880,
+  "totalChunks": 1,
+  "uploadedChunkIndexes": [
+    0
+  ],
+  "status": "DONE",
+  "expiresAt": "2026-04-21T08:36:01.276Z",
+  "createdAt": "2026-04-20T08:36:01.276Z",
+  "updatedAt": "2026-04-20T08:36:01.301Z"
+}
