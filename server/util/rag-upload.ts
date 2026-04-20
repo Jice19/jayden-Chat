@@ -13,6 +13,7 @@ export function getUserKbDir(userId: string): string {
 export async function ensureUserKbDir(userId: string): Promise<string> {
   const dir = getUserKbDir(userId)
   await mkdir(dir, { recursive: true })
+  await mkdir(join(dir, 'files'), { recursive: true })
   return dir
 }
 

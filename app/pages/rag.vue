@@ -13,7 +13,7 @@
 
       <div class="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
         <p class="text-sm text-[var(--color-text-secondary)]">
-          当前支持格式：<span class="font-medium">.md / .txt / .pdf</span>，单文件最大 20MB。
+          当前支持格式：<span class="font-medium">.md / .txt / .pdf</span>，支持大文件分片上传（默认 5MB 分片，断点续传、秒传）。
         </p>
 
         <div class="mt-3 flex flex-wrap items-center gap-3">
@@ -29,7 +29,7 @@
             :disabled="!selectedFile || uploading"
             @click="uploadSelectedFile"
           >
-            {{ uploading ? '上传中...' : '上传文件' }}
+            {{ uploading ? stageText : '上传文件' }}
           </button>
           <button
             class="rounded-md border border-[var(--color-border)] px-4 py-1.5 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-hover)] disabled:opacity-60"
@@ -42,6 +42,12 @@
 
         <p v-if="selectedFile" class="mt-2 text-xs text-[var(--color-text-secondary)]">
           已选择：{{ selectedFile.name }}（{{ formatBytes(selectedFile.size) }}）
+        </p>
+        <p v-if="hashProgress > 0 && hashProgress < 100" class="mt-1 text-xs text-[var(--color-text-secondary)]">
+          哈希计算进度：{{ hashProgress }}%
+        </p>
+        <p v-if="uploadProgress > 0 && uploadProgress <= 100" class="mt-1 text-xs text-[var(--color-text-secondary)]">
+          上传进度：{{ uploadProgress }}%
         </p>
         <p v-if="errorMsg" class="mt-2 text-xs text-red-500">{{ errorMsg }}</p>
         <p v-if="successMsg" class="mt-2 text-xs text-green-600">{{ successMsg }}</p>
@@ -109,8 +115,14 @@ const selectedFile = ref<File | null>(null)
 const documents = ref<RagDocumentItem[]>([])
 const loading = ref(false)
 const uploading = ref(false)
+const hashProgress = ref(0)
+const uploadProgress = ref(0)
+const stageText = ref('上传中...')
 const errorMsg = ref('')
 const successMsg = ref('')
+
+const CHUNK_SIZE = 5 * 1024 * 1024
+const MAX_CONCURRENCY = 3
 
 async function loadDocuments() {
   loading.value = true
@@ -138,21 +150,83 @@ function onFileChange(event: Event) {
 async function uploadSelectedFile() {
   if (!selectedFile.value || uploading.value) return
   uploading.value = true
+  hashProgress.value = 0
+  uploadProgress.value = 0
+  stageText.value = '计算哈希中...'
   errorMsg.value = ''
   successMsg.value = ''
 
   try {
-    const formData = new FormData()
-    formData.append('file', selectedFile.value)
+    const file = selectedFile.value
+    const fileHash = await computeFileHash(file)
+    hashProgress.value = 100
 
-    const res = (await api.post('/rag/documents/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })) as unknown as { success: boolean; message: string }
-
-    if (!res.success) {
-      throw new Error(res.message || '上传失败')
+    stageText.value = '初始化上传会话...'
+    const initRes = (await api.post('/rag/uploads/init', {
+      fileName: file.name,
+      fileHash,
+      fileSize: file.size,
+      chunkSize: CHUNK_SIZE
+    })) as unknown as {
+      success: boolean
+      message: string
+      data: {
+        shouldUpload: boolean
+        uploadId: string
+        uploadedChunkIndexes: number[]
+        totalChunks: number
+      }
+    }
+    if (!initRes.success) {
+      throw new Error(initRes.message || '初始化上传失败')
     }
 
+    if (!initRes.data.shouldUpload) {
+      successMsg.value = '秒传成功（文件已存在）'
+      selectedFile.value = null
+      if (fileInputRef.value) fileInputRef.value.value = ''
+      await loadDocuments()
+      return
+    }
+
+    const uploadId = initRes.data.uploadId
+    const uploadedSet = new Set<number>(initRes.data.uploadedChunkIndexes || [])
+    const totalChunks = initRes.data.totalChunks || Math.ceil(file.size / CHUNK_SIZE)
+
+    localStorage.setItem(getUploadStorageKey(fileHash), uploadId)
+
+    stageText.value = '分片上传中...'
+    uploadProgress.value = Number(((uploadedSet.size / totalChunks) * 100).toFixed(2))
+
+    const missingIndexes: number[] = []
+    for (let i = 0; i < totalChunks; i += 1) {
+      if (!uploadedSet.has(i)) {
+        missingIndexes.push(i)
+      }
+    }
+
+    await runWithConcurrency(missingIndexes, MAX_CONCURRENCY, async (chunkIndex) => {
+      const start = chunkIndex * CHUNK_SIZE
+      const end = Math.min(file.size, start + CHUNK_SIZE)
+      const chunk = file.slice(start, end)
+      const chunkHash = await sha256Hex(await chunk.arrayBuffer())
+
+      await uploadChunk(uploadId, chunkIndex, chunkHash, chunk)
+      uploadedSet.add(chunkIndex)
+      uploadProgress.value = Number(((uploadedSet.size / totalChunks) * 100).toFixed(2))
+    })
+
+    stageText.value = '服务端合并中...'
+    const completeRes = (await api.post('/rag/uploads/complete', {
+      uploadId,
+      fileHash
+    })) as unknown as { success: boolean; message: string }
+
+    if (!completeRes.success) {
+      throw new Error(completeRes.message || '文件合并失败')
+    }
+
+    localStorage.removeItem(getUploadStorageKey(fileHash))
     successMsg.value = '上传成功'
     selectedFile.value = null
     if (fileInputRef.value) {
@@ -163,7 +237,104 @@ async function uploadSelectedFile() {
     errorMsg.value = `上传失败：${(error as Error).message}`
   } finally {
     uploading.value = false
+    stageText.value = '上传中...'
   }
+}
+
+async function uploadChunk(
+  uploadId: string,
+  chunkIndex: number,
+  chunkHash: string,
+  chunkFile: Blob
+): Promise<void> {
+  const maxRetry = 3
+  let attempt = 0
+  while (attempt < maxRetry) {
+    try {
+      const formData = new FormData()
+      formData.append('uploadId', uploadId)
+      formData.append('chunkIndex', String(chunkIndex))
+      formData.append('chunkHash', chunkHash)
+      formData.append('chunkFile', chunkFile, `chunk-${chunkIndex}.part`)
+
+      const res = (await api.put('/rag/uploads/chunk', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })) as unknown as { success: boolean; message?: string }
+
+      if (!res.success) {
+        throw new Error(res.message || '分片上传失败')
+      }
+      return
+    } catch (error) {
+      attempt += 1
+      if (attempt >= maxRetry) {
+        throw error
+      }
+      await wait(300 * attempt)
+    }
+  }
+}
+
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  let index = 0
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (index < items.length) {
+      const current = items[index]
+      index += 1
+      if (current !== undefined) {
+        await worker(current)
+      }
+    }
+  })
+  await Promise.all(runners)
+}
+
+function computeFileHash(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../workers/file-hash.worker.ts', import.meta.url), {
+      type: 'module'
+    })
+
+    worker.onmessage = (event: MessageEvent<{ type: string; progress?: number; hash?: string; message?: string }>) => {
+      const payload = event.data
+      if (payload.type === 'progress' && typeof payload.progress === 'number') {
+        hashProgress.value = payload.progress
+      }
+      if (payload.type === 'done' && payload.hash) {
+        worker.terminate()
+        resolve(payload.hash)
+      }
+      if (payload.type === 'error') {
+        worker.terminate()
+        reject(new Error(payload.message || '计算 hash 失败'))
+      }
+    }
+
+    worker.onerror = () => {
+      worker.terminate()
+      reject(new Error('WebWorker 执行失败'))
+    }
+
+    worker.postMessage({ file, chunkSize: CHUNK_SIZE })
+  })
+}
+
+async function sha256Hex(buffer: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', buffer)
+  const bytes = Array.from(new Uint8Array(digest))
+  return bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function getUploadStorageKey(fileHash: string): string {
+  return `rag_upload_session_${fileHash}`
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function formatBytes(size: number): string {

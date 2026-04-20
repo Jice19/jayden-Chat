@@ -1,12 +1,14 @@
 import { writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import {
   MAX_UPLOAD_SIZE,
   RAG_ALLOWED_EXTENSIONS,
   buildStoredFileName,
-  buildStoredFilePath,
   ensureUserKbDir,
-  isAllowedFileType
+  isAllowedFileType,
+  normalizeExt
 } from '../../../util/rag-upload'
+import { getFinalFilePath, upsertRagDocument } from '../../../util/rag-kb-store'
 
 interface UploadResponse {
   id: string
@@ -49,15 +51,28 @@ export default defineEventHandler(async (event) => {
 
   await ensureUserKbDir(userId)
   const storedName = buildStoredFileName(filePart.filename)
-  const filePath = buildStoredFilePath(userId, storedName)
+  const filePath = getFinalFilePath(userId, storedName)
   await writeFile(filePath, filePart.data)
+
+  const fileHash = createHash('sha256').update(filePart.data).digest('hex')
+  const ext = normalizeExt(filePart.filename).replace('.', '')
+
+  await upsertRagDocument(userId, {
+    id: storedName,
+    originalName: filePart.filename,
+    storedName,
+    fileHash,
+    size: filePart.data.byteLength,
+    ext,
+    uploadedAt: new Date().toISOString()
+  })
 
   const payload: UploadResponse = {
     id: storedName,
     originalName: filePart.filename,
     storedName,
     size: filePart.data.byteLength,
-    ext: storedName.split('.').pop() || '',
+    ext,
     uploadedAt: new Date().toISOString()
   }
 

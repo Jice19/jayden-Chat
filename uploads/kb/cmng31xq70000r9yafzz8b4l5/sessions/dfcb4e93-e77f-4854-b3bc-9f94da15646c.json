@@ -1,0 +1,16 @@
+{
+  "id": "dfcb4e93-e77f-4854-b3bc-9f94da15646c",
+  "userId": "cmng31xq70000r9yafzz8b4l5",
+  "fileName": "面经.md",
+  "fileHash": "73ab2bf0b88da4cbce30a5bd8ce4044a5e4868e9a544064e789800238f291884",
+  "fileSize": 28154,
+  "chunkSize": 5242880,
+  "totalChunks": 1,
+  "uploadedChunkIndexes": [
+    0
+  ],
+  "status": "DONE",
+  "expiresAt": "2026-04-21T07:19:00.977Z",
+  "createdAt": "2026-04-20T07:19:00.977Z",
+  "updatedAt": "2026-04-20T07:19:00.998Z"
+}
