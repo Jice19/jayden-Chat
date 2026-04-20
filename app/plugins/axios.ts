@@ -32,36 +32,35 @@ export default defineNuxtPlugin(() => {
       // 如果是 401 错误且不是刷新 Token 的请求本身
       if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/api/auth/refresh')) {
         originalRequest._retry = true
-        const refreshToken = useCookie<string | null>('refresh_token').value
-        
-        if (refreshToken) {
-          try {
-            // 尝试请求刷新接口
-            const { data } = await api.post('/auth/refresh', { refreshToken })
-            if (data.success) {
-              const { accessToken, refreshToken: newRefreshToken } = data.data
-              
-              // 更新 Cookie
-              const tokenCookie = useCookie('token')
-              const refreshCookie = useCookie('refresh_token')
-              tokenCookie.value = accessToken
-              refreshCookie.value = newRefreshToken
-              
-              // 更新 LocalStorage (如果是在浏览器环境)
-              if (process.client) {
-                localStorage.setItem('auth_access_token', accessToken)
-                localStorage.setItem('auth_refresh_token', newRefreshToken)
-              }
+        try {
+          // 刷新接口从 HttpOnly Cookie 中读取 refresh_token，无需前端传参
+          const { data } = await api.post('/auth/refresh')
+          if (data.success) {
+            const { accessToken } = data.data as { accessToken: string }
 
-              // 重新发起原始请求
-              originalRequest.headers.Authorization = `Bearer ${accessToken}`
-              return api(originalRequest)
-            }
-          } catch (refreshError) {
-            // 刷新失败，重定向到登录或清除状态
+            // 更新可读 access token（供拦截器继续注入）
+            const tokenCookie = useCookie('token')
+            tokenCookie.value = accessToken
+
             if (process.client) {
-              window.location.href = '/?login=1'
+              localStorage.setItem('auth_access_token', accessToken)
             }
+
+            if (originalRequest.headers instanceof AxiosHeaders) {
+              originalRequest.headers.set('Authorization', `Bearer ${accessToken}`)
+            } else {
+              originalRequest.headers = {
+                ...(originalRequest.headers ?? {}),
+                Authorization: `Bearer ${accessToken}`
+              }
+            }
+            return api(originalRequest)
+          }
+        } catch {
+          if (process.client) {
+            localStorage.removeItem('auth_access_token')
+            document.cookie = 'token=; path=/; max-age=0'
+            window.location.href = '/?login=1'
           }
         }
       }

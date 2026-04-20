@@ -11,31 +11,21 @@ const isLoggedIn = ref(false)
 const showLoginModal = ref(false)
 
 const ACCESS_TOKEN_KEY = 'auth_access_token'
-const REFRESH_TOKEN_KEY = 'auth_refresh_token'
 
 const getAccessToken = (): string => {
   if (typeof window === 'undefined') return ''
   return localStorage.getItem(ACCESS_TOKEN_KEY) || ''
 }
 
-const getRefreshToken = (): string => {
-  if (typeof window === 'undefined') return ''
-  return localStorage.getItem(REFRESH_TOKEN_KEY) || ''
-}
-
-const setTokens = (accessToken: string, refreshToken: string) => {
+const setTokens = (accessToken: string) => {
   localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
-  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
   // 同步写 cookie，供 axios 拦截器读取
   document.cookie = `token=${accessToken}; path=/; max-age=${2 * 3600}; SameSite=Lax`
-  document.cookie = `refresh_token=${refreshToken}; path=/; max-age=${7 * 24 * 3600}; SameSite=Lax`
 }
 
 const clearTokens = () => {
   localStorage.removeItem(ACCESS_TOKEN_KEY)
-  localStorage.removeItem(REFRESH_TOKEN_KEY)
   document.cookie = 'token=; path=/; max-age=0'
-  document.cookie = 'refresh_token=; path=/; max-age=0'
 }
 
 export const useAuth = () => {
@@ -46,12 +36,12 @@ export const useAuth = () => {
     loading.value = true
     errorMsg.value = ''
     try {
-      const res = await $fetch<{ code: number; success: boolean; data: { accessToken: string; refreshToken: string; username: string } }>('/api/auth/login', {
+      const res = await $fetch<{ code: number; success: boolean; data: { accessToken: string; username: string } }>('/api/auth/login', {
         method: 'POST',
         body: { username, password }
       })
       if (res.success) {
-        setTokens(res.data.accessToken, res.data.refreshToken)
+        setTokens(res.data.accessToken)
         user.value = { username: res.data.username, userId: '' }
         isLoggedIn.value = true
         showLoginModal.value = false
@@ -70,12 +60,12 @@ export const useAuth = () => {
     loading.value = true
     errorMsg.value = ''
     try {
-      const res = await $fetch<{ code: number; success: boolean; data: { accessToken: string; refreshToken: string; username: string } }>('/api/auth/register', {
+      const res = await $fetch<{ code: number; success: boolean; data: { accessToken: string; username: string } }>('/api/auth/register', {
         method: 'POST',
         body: { username, password }
       })
       if (res.success) {
-        setTokens(res.data.accessToken, res.data.refreshToken)
+        setTokens(res.data.accessToken)
         user.value = { username: res.data.username, userId: '' }
         isLoggedIn.value = true
         showLoginModal.value = false
@@ -118,20 +108,16 @@ export const useAuth = () => {
       }
     } catch {
       // 如果 access token 过期，尝试静默刷新
-      const refreshToken = getRefreshToken()
-      if (refreshToken) {
-        try {
-          const refreshRes = await $fetch<{ success: boolean; data: { accessToken: string; refreshToken: string } }>('/api/auth/refresh', {
-            method: 'POST',
-            body: { refreshToken }
-          })
-          if (refreshRes.success) {
-            setTokens(refreshRes.data.accessToken, refreshRes.data.refreshToken)
-            return restoreSession()
-          }
-        } catch {
-          // 刷新失败，清除 token
+      try {
+        const refreshRes = await $fetch<{ success: boolean; data: { accessToken: string } }>('/api/auth/refresh', {
+          method: 'POST'
+        })
+        if (refreshRes.success) {
+          setTokens(refreshRes.data.accessToken)
+          return restoreSession()
         }
+      } catch {
+        // 刷新失败，清除 token
       }
       clearTokens()
       showLoginModal.value = true

@@ -1,7 +1,7 @@
 import { verifyToken, signToken, signRefreshToken } from '../../util/jwt'
 
 export default defineEventHandler(async (event) => {
-  const { refreshToken } = await readBody(event)
+  const refreshToken = getCookie(event, 'refresh_token')
 
   if (!refreshToken) {
     throw createError({ statusCode: 400, message: 'Refresh Token 不能为空' })
@@ -19,11 +19,26 @@ export default defineEventHandler(async (event) => {
     const newAccessToken = await signToken({ sub: payload.sub, username: payload.username })
     const newRefreshToken = await signRefreshToken({ sub: payload.sub, username: payload.username })
 
+    setCookie(event, 'refresh_token', newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 3600
+    })
+
+    setCookie(event, 'token', newAccessToken, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 2 * 3600
+    })
+
     return {
       success: true,
       data: {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken
+        accessToken: newAccessToken
       }
     }
   } catch (e) {

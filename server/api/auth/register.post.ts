@@ -31,10 +31,26 @@ export default defineEventHandler(async (event) => {
   const accessToken = await signToken({ sub: user.id, username: user.username })
   const refreshToken = await signRefreshToken({ sub: user.id, username: user.username })
 
+  setCookie(event, 'refresh_token', refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 7 * 24 * 3600
+  })
+
+  setCookie(event, 'token', accessToken, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 2 * 3600
+  })
+
   return {
     code: 200,
     success: true,
     message: '注册成功',
-    data: { accessToken, refreshToken, username: user.username }
+    data: { accessToken, username: user.username }
   }
 })
