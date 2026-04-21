@@ -7,14 +7,25 @@ export async function callAliyunAI(
   history: Array<{ role: string, content: string }> = [],
   stream = false
 ) {
-  const apiKey = getApiKey()
-  
-  // 自动根据环境选择 Endpoint，解决 Vercel 海外访问国内节点的网络拦截问题
-  const isVercel = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production'
-  const endpoint = isVercel 
+  // 1. 优先用 Vercel 系统变量判断，避免 NODE_ENV 误判
+  const isVercelEnv = typeof process.env.VERCEL !== 'undefined' && process.env.VERCEL === '1'
+  const isProductionEnv = process.env.NODE_ENV === 'production'
+  const useIntlEndpoint = isVercelEnv || isProductionEnv
+
+  // 2. 强制日志输出，方便线上排查
+  console.log('[DashScope Endpoint Check][chat]', {
+    VERCEL: process.env.VERCEL,
+    NODE_ENV: process.env.NODE_ENV,
+    useIntlEndpoint
+  })
+
+  // 3. 明确指定端点
+  const endpoint = useIntlEndpoint
     ? 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions'
     : 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
 
+  // 4. 其他逻辑保持不变
+  const apiKey = getApiKey()
   const modelName = 'qwen-plus'
 
   // 构建消息列表：历史记录 + 当前提问

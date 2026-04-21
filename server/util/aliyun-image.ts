@@ -1,18 +1,28 @@
 import type { ImageGenRequest, ImageGenResult } from '../../types/image'
 import { getApiKey } from './get-api-key'
 
-const ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation'
 const MODEL = 'qwen-image-2.0'
 
 export async function generateImage(req: ImageGenRequest): Promise<ImageGenResult> {
-  const apiKey = getApiKey()
-  
-  // 自动根据环境选择 Endpoint，解决 Vercel 海外访问国内节点的网络拦截问题
-  const isVercel = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production'
-  const endpoint = isVercel 
+  // 1. 优先用 Vercel 系统变量判断，避免 NODE_ENV 误判
+  const isVercelEnv = typeof process.env.VERCEL !== 'undefined' && process.env.VERCEL === '1'
+  const isProductionEnv = process.env.NODE_ENV === 'production'
+  const useIntlEndpoint = isVercelEnv || isProductionEnv
+
+  // 2. 强制日志输出，方便线上排查
+  console.log('[DashScope Endpoint Check][image]', {
+    VERCEL: process.env.VERCEL,
+    NODE_ENV: process.env.NODE_ENV,
+    useIntlEndpoint
+  })
+
+  // 3. 明确指定端点
+  const endpoint = useIntlEndpoint
     ? 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation'
     : 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation'
 
+  // 4. 其他逻辑保持不变
+  const apiKey = getApiKey()
   const size = req.size ?? '1024*1024'
 
   const body = {
