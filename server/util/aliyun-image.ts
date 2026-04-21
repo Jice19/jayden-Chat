@@ -6,6 +6,12 @@ const MODEL = 'qwen-image-2.0'
 
 export async function generateImage(req: ImageGenRequest): Promise<ImageGenResult> {
   const apiKey = getApiKey()
+  
+  // 自动根据环境选择 Endpoint，解决 Vercel 海外访问国内节点的网络拦截问题
+  const isVercel = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production'
+  const endpoint = isVercel 
+    ? 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation'
+    : 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation'
 
   const size = req.size ?? '1024*1024'
 
@@ -37,7 +43,7 @@ export async function generateImage(req: ImageGenRequest): Promise<ImageGenResul
         }
       }>
     }
-  }>(ENDPOINT, {
+  }>(endpoint, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,

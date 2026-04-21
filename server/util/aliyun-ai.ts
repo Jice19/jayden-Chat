@@ -8,7 +8,13 @@ export async function callAliyunAI(
   stream = false
 ) {
   const apiKey = getApiKey()
-  const endpoint = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+  
+  // 自动根据环境选择 Endpoint，解决 Vercel 海外访问国内节点的网络拦截问题
+  const isVercel = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production'
+  const endpoint = isVercel 
+    ? 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions'
+    : 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+
   const modelName = 'qwen-plus'
 
   // 构建消息列表：历史记录 + 当前提问
