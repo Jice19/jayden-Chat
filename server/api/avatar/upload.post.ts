@@ -2,12 +2,25 @@ import { readMultipartFormData } from 'h3'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import { PrismaClient } from '@prisma/client'
 
 const MAX_SIZE = 2 * 1024 * 1024 // 2MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const prisma = (global as any).prisma || new PrismaClient()
+if (process.env.NODE_ENV !== 'production') (global as any).prisma = prisma
+
+const isAvatarSchemaNotReady = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes('Unknown argument `avatarUrl`') || message.includes('column') && message.includes('avatarUrl')
+}
 
 export default defineEventHandler(async (event) => {
   try {
+    const userId = event.context.user?.sub as string | undefined
+    if (!userId) {
+      return { code: 401, success: false, message: '未登录，请先登录' }
+    }
+
     const parts = await readMultipartFormData(event)
     if (!parts || parts.length === 0) {
       return { code: 400, success: false, message: '未收到文件' }
@@ -33,18 +46,32 @@ export default defineEventHandler(async (event) => {
       await mkdir(uploadDir, { recursive: true })
     }
 
-    const ext = mimeType.split('/')[1].replace('jpeg', 'jpg')
+    const [, rawExt = 'jpg'] = mimeType.split('/')
+    const ext = rawExt.replace('jpeg', 'jpg')
     const filename = `user_${Date.now()}.${ext}`
     const filePath = join(uploadDir, filename)
     await writeFile(filePath, file.data)
+    const avatarUrl = `/avatars/${filename}`
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl }
+    })
 
     return {
       code: 200,
       success: true,
       message: '上传成功',
-      data: { url: `/avatars/${filename}` }
+      data: { url: avatarUrl }
     }
   } catch (error) {
+    if (isAvatarSchemaNotReady(error)) {
+      return {
+        code: 503,
+        success: false,
+        message: '头像字段尚未同步到数据库，请先执行 Prisma migrate/generate 并重启服务'
+      }
+    }
     return {
       code: 500,
       success: false,
