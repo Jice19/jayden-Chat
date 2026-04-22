@@ -16,7 +16,7 @@
  */
 import { runUnifiedGraph } from '../../util/unified-graph'
 import { PrismaClient } from '@prisma/client'
-import { verifyToken } from '../../util/jwt'
+import { verifyAccessToken } from '../../util/jwt'
 import { startUnifiedRequestTimer } from '../../util/unified-performance'
 
 const prisma = (global as any).__prisma || new PrismaClient()
@@ -38,7 +38,7 @@ export default defineEventHandler(async (event) => {
   try {
     const token = getCookie(event, 'token') || getHeader(event, 'authorization')?.replace('Bearer ', '')
     if (token) {
-      const payload = await verifyToken(token)
+      const payload = await verifyAccessToken(token)
       userId = payload.sub as string
     }
   } catch {

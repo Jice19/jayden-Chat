@@ -1,9 +1,11 @@
-import { verifyToken } from '../util/jwt'
+import { verifyAccessToken } from '../util/jwt'
 
 // 无需认证的公开路由
 const PUBLIC_ROUTES = [
   '/api/auth/login',
   '/api/auth/register',
+  '/api/auth/refresh',
+  '/api/auth/logout'
 ]
 
 export default defineEventHandler(async (event) => {
@@ -25,7 +27,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const payload = await verifyToken(token)
+    const payload = await verifyAccessToken(token)
     // 将用户信息注入上下文，后续 handler 可直接使用
     event.context.user = payload
   } catch {

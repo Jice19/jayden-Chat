@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
   })
 
   setCookie(event, 'token', accessToken, {
-    httpOnly: false,
+    httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
@@ -45,6 +45,6 @@ export default defineEventHandler(async (event) => {
     code: 200,
     success: true,
     message: '登录成功',
-    data: { accessToken, username: user.username }
+    data: { username: user.username }
   }
 })

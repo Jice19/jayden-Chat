@@ -1,0 +1,16 @@
+{
+  "id": "603c1ab0-e2d7-4cbc-a5a5-e4b89019c152",
+  "userId": "cmo833i6s0000mtbppxcv4glt",
+  "fileName": "笔记.md",
+  "fileHash": "1906787c7430edb3f15edccebe5fd63993591376a5877225658b4cde60a96cfc",
+  "fileSize": 174540,
+  "chunkSize": 5242880,
+  "totalChunks": 1,
+  "uploadedChunkIndexes": [
+    0
+  ],
+  "status": "DONE",
+  "expiresAt": "2026-04-23T13:19:39.611Z",
+  "createdAt": "2026-04-22T13:19:39.611Z",
+  "updatedAt": "2026-04-22T13:19:40.276Z"
+}

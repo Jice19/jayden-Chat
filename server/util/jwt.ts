@@ -13,6 +13,8 @@ export interface JwtPayload {
   type?: 'access' | 'refresh'
 }
 
+type TokenType = NonNullable<JwtPayload['type']>
+
 export const signToken = async (payload: JwtPayload): Promise<string> => {
   return new SignJWT({ ...payload, type: 'access' })
     .setProtectedHeader({ alg: 'HS256' })
@@ -32,4 +34,21 @@ export const signRefreshToken = async (payload: JwtPayload): Promise<string> => 
 export const verifyToken = async (token: string): Promise<JwtPayload> => {
   const { payload } = await jwtVerify(token, SECRET)
   return payload as unknown as JwtPayload
+}
+
+const verifyTokenType = (payload: JwtPayload, expectedType: TokenType): JwtPayload => {
+  if (payload.type !== expectedType) {
+    throw new Error(`Invalid token type: expected ${expectedType}, got ${payload.type ?? 'undefined'}`)
+  }
+  return payload
+}
+
+export const verifyAccessToken = async (token: string): Promise<JwtPayload> => {
+  const payload = await verifyToken(token)
+  return verifyTokenType(payload, 'access')
+}
+
+export const verifyRefreshToken = async (token: string): Promise<JwtPayload> => {
+  const payload = await verifyToken(token)
+  return verifyTokenType(payload, 'refresh')
 }

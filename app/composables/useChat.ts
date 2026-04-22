@@ -5,9 +5,6 @@ import { fetchEventSource } from '@microsoft/fetch-event-source'
 import type { ApiResult } from '../../types/api'
 import type { ChatMessage, Session } from '../../types/chat'
 
-const getToken = (): string =>
-  typeof window !== 'undefined' ? localStorage.getItem('auth_access_token') || '' : ''
-
 export const useChat = () => {
   const inputText = ref('')
   const chatList = ref<ChatMessage[]>([])
@@ -180,7 +177,6 @@ export const useChat = () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getToken()}`,
       },
       body: JSON.stringify({
         prompt: userContent,

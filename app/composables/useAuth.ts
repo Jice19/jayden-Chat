@@ -10,22 +10,10 @@ const user = ref<AuthUser | null>(null)
 const isLoggedIn = ref(false)
 const showLoginModal = ref(false)
 
-const ACCESS_TOKEN_KEY = 'auth_access_token'
-
-const getAccessToken = (): string => {
-  if (typeof window === 'undefined') return ''
-  return localStorage.getItem(ACCESS_TOKEN_KEY) || ''
-}
-
-const setTokens = (accessToken: string) => {
-  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
-  // 同步写 cookie，供 axios 拦截器读取
-  document.cookie = `token=${accessToken}; path=/; max-age=${2 * 3600}; SameSite=Lax`
-}
-
 const clearTokens = () => {
-  localStorage.removeItem(ACCESS_TOKEN_KEY)
+  if (!process.client) return
   document.cookie = 'token=; path=/; max-age=0'
+  document.cookie = 'refresh_token=; path=/; max-age=0'
 }
 
 export const useAuth = () => {
@@ -36,12 +24,11 @@ export const useAuth = () => {
     loading.value = true
     errorMsg.value = ''
     try {
-      const res = await $fetch<{ code: number; success: boolean; data: { accessToken: string; username: string } }>('/api/auth/login', {
+      const res = await $fetch<{ code: number; success: boolean; data: { username: string } }>('/api/auth/login', {
         method: 'POST',
         body: { username, password }
       })
       if (res.success) {
-        setTokens(res.data.accessToken)
         user.value = { username: res.data.username, userId: '' }
         isLoggedIn.value = true
         showLoginModal.value = false
@@ -60,12 +47,11 @@ export const useAuth = () => {
     loading.value = true
     errorMsg.value = ''
     try {
-      const res = await $fetch<{ code: number; success: boolean; data: { accessToken: string; username: string } }>('/api/auth/register', {
+      const res = await $fetch<{ code: number; success: boolean; data: { username: string } }>('/api/auth/register', {
         method: 'POST',
         body: { username, password }
       })
       if (res.success) {
-        setTokens(res.data.accessToken)
         user.value = { username: res.data.username, userId: '' }
         isLoggedIn.value = true
         showLoginModal.value = false
@@ -80,46 +66,45 @@ export const useAuth = () => {
     }
   }
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await $fetch('/api/auth/logout', { method: 'POST' })
+    } catch {
+      // 忽略退出失败，仍然清理本地状态
+    }
     clearTokens()
     user.value = null
     isLoggedIn.value = false
     showLoginModal.value = true
   }
 
-  // 刷新页面时从 token 恢复会话（调用 /api/auth/me）
+  // 刷新页面时从 HttpOnly Cookie 恢复会话
   const restoreSession = async () => {
-    const token = getAccessToken()
-    if (!token) {
-      showLoginModal.value = true
-      return
-    }
     try {
-      const res = await $fetch<{ success: boolean; data: AuthUser }>('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      const res = await $fetch<{ success: boolean; data: AuthUser }>('/api/auth/me')
       if (res.success) {
-        // 恢复会话时不需要重新 setTokens，除非 token 发生了变化
         user.value = res.data
         isLoggedIn.value = true
+        showLoginModal.value = false
       } else {
         clearTokens()
         showLoginModal.value = true
       }
     } catch {
-      // 如果 access token 过期，尝试静默刷新
+      // access token 过期时，尝试使用 refresh token 静默刷新
       try {
-        const refreshRes = await $fetch<{ success: boolean; data: { accessToken: string } }>('/api/auth/refresh', {
+        const refreshRes = await $fetch<{ success: boolean }>('/api/auth/refresh', {
           method: 'POST'
         })
         if (refreshRes.success) {
-          setTokens(refreshRes.data.accessToken)
           return restoreSession()
         }
       } catch {
-        // 刷新失败，清除 token
+        // 刷新失败，清理状态
       }
       clearTokens()
+      user.value = null
+      isLoggedIn.value = false
       showLoginModal.value = true
     }
   }

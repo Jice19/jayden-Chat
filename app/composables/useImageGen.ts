@@ -1,11 +1,6 @@
 import { ref } from 'vue'
 import type { ImageGenResult, ImageGenRequest } from '../../types/image'
 
-const getToken = (): string =>
-  typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''
-
-const authHeaders = () => ({ Authorization: `Bearer ${getToken()}` })
-
 export function useImageGen() {
   const isGenerating = ref(false)
   const isLoadingHistory = ref(false)
@@ -21,8 +16,7 @@ export function useImageGen() {
         items: ImageGenResult[]
         total: number
       }>('/api/image/list', {
-        query: { page, pageSize: 20 },
-        headers: authHeaders()
+        query: { page, pageSize: 20 }
       })
 
       if (res.success) {
@@ -41,7 +35,7 @@ export function useImageGen() {
     try {
       const res = await $fetch<{ success: boolean; result?: ImageGenResult; message?: string }>(
         '/api/image/generate',
-        { method: 'POST', body: req, headers: authHeaders() }
+        { method: 'POST', body: req }
       )
 
       if (!res.success || !res.result) {

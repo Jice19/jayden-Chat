@@ -1,4 +1,4 @@
-import { verifyToken, signToken, signRefreshToken } from '../../util/jwt'
+import { verifyRefreshToken, signToken, signRefreshToken } from '../../util/jwt'
 
 export default defineEventHandler(async (event) => {
   const refreshToken = getCookie(event, 'refresh_token')
@@ -8,12 +8,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const payload = await verifyToken(refreshToken)
-    
-    // 校验 token 类型
-    if (payload.type !== 'refresh') {
-      throw new Error('无效的 Token 类型')
-    }
+    const payload = await verifyRefreshToken(refreshToken)
 
     // 生成新的 Access Token 和 Refresh Token (可选，通常 Refresh Token 也可以续期)
     const newAccessToken = await signToken({ sub: payload.sub, username: payload.username })
@@ -28,7 +23,7 @@ export default defineEventHandler(async (event) => {
     })
 
     setCookie(event, 'token', newAccessToken, {
-      httpOnly: false,
+      httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
@@ -37,9 +32,7 @@ export default defineEventHandler(async (event) => {
 
     return {
       success: true,
-      data: {
-        accessToken: newAccessToken
-      }
+      data: {}
     }
   } catch (e) {
     throw createError({ statusCode: 401, message: 'Refresh Token 已过期或无效，请重新登录' })
