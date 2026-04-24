@@ -142,7 +142,8 @@
     <div class="flex-1 flex flex-col h-full min-w-0">
 
       <!-- 消息列表 -->
-      <div ref="chatContainerRef" class="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+      <div ref="chatContainerRef" class="flex-1 overflow-y-auto px-4 py-6">
+        <div class="responsive-input-container mx-auto space-y-4">
 
         <!-- 空状态提示 -->
         <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-full gap-3 text-[var(--color-text-disabled)]">
@@ -242,15 +243,16 @@
             <span v-else>我</span>
           </div>
         </div>
-
       </div>
+
+    </div>
 
       <!-- 输入区 -->
       <div class="bg-[var(--color-surface)] border-t border-[var(--color-border)] p-4">
-        <div class="max-w-3xl mx-auto relative">
+        <div class="responsive-input-container mx-auto relative">
           <textarea
             v-model="inputText"
-            class="w-full bg-[var(--color-background)] text-[var(--color-text-primary)] border border-[var(--color-border)] rounded-xl p-3 pr-24 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none shadow-sm text-sm"
+            class="responsive-textarea w-full bg-[var(--color-background)] text-[var(--color-text-primary)] border border-[var(--color-border)] rounded-xl p-3 pr-24 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none shadow-sm text-sm"
             placeholder="输入文字问题或图片需求，AI 自动判断…（Enter 发送，Shift+Enter 换行）"
             rows="3"
             :disabled="isSending"
@@ -472,3 +474,23 @@ onMounted(() => {
   fetchMetrics()
 })
 </script>
+
+<style scoped>
+/* 响应式布局：基于 vh/vw 实现等比例缩放，同时保持间距固定 */
+.responsive-input-container {
+  /* 宽度随窗口变化，使用 vw。clamp 确保在极小/极大屏幕下依然可用 */
+  width: clamp(320px, 80vw, 1200px);
+  /* 这里的等比例感可以通过容器宽度来驱动 */
+}
+
+.responsive-textarea {
+  /* 高度随窗口高度变化，使用 vh。实现垂直方向的等比例缩放感 */
+  height: clamp(80px, 15vh, 400px);
+  
+  /* 内部间距保持 px/rem (由原 Tailwind class p-3 提供)，满足“间距不变” */
+  /* 如果需要完全控制，可以在这里显式写 padding: 12px; */
+}
+
+/* 如果需要强制等比例（比如 16:4 的盒子），可以启用 aspect-ratio */
+/* .responsive-input-container { aspect-ratio: 16 / 4; } */
+</style>
