@@ -26,7 +26,7 @@ export async function callAliyunAI(
 
   // 4. 其他逻辑保持不变
   const apiKey = getApiKey()
-  const modelName = 'qwen-plus'
+  const modelName = 'qwen3.6-plus'
 
   // 构建消息列表：历史记录 + 当前提问
   const messages = [

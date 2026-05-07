@@ -42,7 +42,7 @@ function getCompiledGraph() {
 
 function createLLM() {
   return new ChatOpenAI({
-    modelName: 'qwen-plus',
+    modelName: 'qwen3.6-plus',
     openAIApiKey: getApiKey(),
     configuration: {
       baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1'

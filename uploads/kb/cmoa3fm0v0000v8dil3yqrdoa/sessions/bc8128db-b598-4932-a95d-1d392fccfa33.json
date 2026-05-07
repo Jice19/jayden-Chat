@@ -1,0 +1,16 @@
+{
+  "id": "bc8128db-b598-4932-a95d-1d392fccfa33",
+  "userId": "cmoa3fm0v0000v8dil3yqrdoa",
+  "fileName": "RAG的分块策略详解.md",
+  "fileHash": "5b7c31b695ccb6adc2db55fccbfb876ad9bdd864715ea9eb6010857c984bffbb",
+  "fileSize": 8273,
+  "chunkSize": 5242880,
+  "totalChunks": 1,
+  "uploadedChunkIndexes": [
+    0
+  ],
+  "status": "DONE",
+  "expiresAt": "2026-05-08T11:59:50.955Z",
+  "createdAt": "2026-05-07T11:59:50.955Z",
+  "updatedAt": "2026-05-07T11:59:51.583Z"
+}

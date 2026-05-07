@@ -269,7 +269,7 @@
           </div>
         </div>
         <p class="text-center text-xs text-[var(--color-text-disabled)] mt-2">
-          由 LangGraph 驱动 · qwen-plus + qwen-image-2.0
+          由 LangGraph 驱动 · qwen3.6-plus + qwen-image-2.0
         </p>
       </div>
 

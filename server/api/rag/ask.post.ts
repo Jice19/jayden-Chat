@@ -3,6 +3,7 @@ import {
   buildRagContext,
   getIndexedDocumentIds,
   ingestDocumentToRag,
+  runRagPipeline,
   searchRagChunks
 } from '../../util/rag-index'
 import { getApiKey } from '../../util/get-api-key'
@@ -12,7 +13,11 @@ interface AskBody {
   question: string
   mode?: 'qa' | 'review' | 'summary'
   topK?: number
+  recallTopK?: number
+  rerankTopN?: number
+  queryExpansionCount?: number
   documentIds?: string[]
+  debug?: boolean
 }
 
 let _ragLlm: ChatOpenAI | null = null
@@ -20,7 +25,7 @@ let _ragLlm: ChatOpenAI | null = null
 function getRagLlm(): ChatOpenAI {
   if (_ragLlm) return _ragLlm
   _ragLlm = new ChatOpenAI({
-    modelName: 'qwen-plus',
+    modelName: 'qwen3.6-plus',
     openAIApiKey: getApiKey(),
     configuration: {
       baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
@@ -50,7 +55,11 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<AskBody>(event)
   const question = String(body.question || '').trim()
   const mode = body.mode || 'qa'
-  const topK = Math.max(1, Math.min(10, Number(body.topK || 5)))
+  const topK = Math.max(1, Math.min(10, Number(body.topK || body.rerankTopN || 5)))
+  const recallTopK = Math.max(1, Math.min(50, Number(body.recallTopK || 20)))
+  const rerankTopN = Math.max(1, Math.min(10, Number(body.rerankTopN || topK || 5)))
+  const queryExpansionCount = Math.max(1, Math.min(5, Number(body.queryExpansionCount || 3)))
+  const debug = Boolean(body.debug)
   const documentIds = Array.isArray(body.documentIds) ? body.documentIds : undefined
 
   if (!question) {
@@ -99,7 +108,16 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const context = buildRagContext(retrieved)
+  const pipeline = await runRagPipeline({
+    userId,
+    question,
+    recallTopK,
+    rerankTopN,
+    queryExpansionCount,
+    documentIds
+  })
+  const finalChunks = pipeline.chunks.length > 0 ? pipeline.chunks : retrieved.slice(0, rerankTopN)
+  const context = buildRagContext(finalChunks)
   const systemPrompt = [
     '你是一个严格基于知识库回答的助手。',
     buildModeInstruction(mode),
@@ -116,7 +134,7 @@ export default defineEventHandler(async (event) => {
     }
   ])
 
-  const references = retrieved.map((item) => ({
+  const references = finalChunks.map((item) => ({
     documentId: item.documentId,
     title: item.title,
     chunkIndex: item.chunkIndex,
@@ -130,7 +148,16 @@ export default defineEventHandler(async (event) => {
     data: {
       answer: String(response.content || ''),
       references,
-      usedChunks: retrieved.length
+      usedChunks: finalChunks.length,
+      ...(debug
+        ? {
+            debugTrace: {
+              ...pipeline.debugTrace,
+              retrievedSummaries: pipeline.debugTrace.recallCandidates,
+              rerankedChunks: pipeline.debugTrace.finalContext
+            }
+          }
+        : {})
     }
   }
 })

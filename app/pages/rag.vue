@@ -436,21 +436,40 @@ async function reindexDocuments() {
     const res = (await api.post('/rag/documents/reindex')) as unknown as {
       success: boolean
       message: string
-      data?: { total: number; success: number; failed: number }
+      data?: { running: boolean; total: number; success: number; failed: number; message?: string }
     }
     if (!res.success) {
       throw new Error(res.message || '重建失败')
     }
-    const total = res.data?.total ?? 0
-    const success = res.data?.success ?? 0
-    const failed = res.data?.failed ?? 0
-    successMsg.value = `索引重建完成：总计 ${total}，成功 ${success}，失败 ${failed}`
-    await loadDocuments()
+    successMsg.value = res.message || '重建任务已启动'
+    await pollReindexStatus()
   } catch (error) {
     errorMsg.value = `重建索引失败：${(error as Error).message}`
   } finally {
     reindexing.value = false
   }
+}
+
+async function pollReindexStatus(): Promise<void> {
+  const maxPoll = 180
+  for (let i = 0; i < maxPoll; i += 1) {
+    const statusRes = (await api.get('/rag/documents/reindex-status')) as unknown as {
+      success: boolean
+      data: { running: boolean; total: number; success: number; failed: number; message?: string }
+    }
+    if (!statusRes.success) {
+      break
+    }
+    const status = statusRes.data
+    if (!status.running) {
+      successMsg.value = `索引重建完成：总计 ${status.total}，成功 ${status.success}，失败 ${status.failed}`
+      await loadDocuments()
+      return
+    }
+    successMsg.value = `重建中：总计 ${status.total}，成功 ${status.success}，失败 ${status.failed}`
+    await wait(2000)
+  }
+  successMsg.value = '重建任务仍在后台执行，请稍后刷新列表查看结果'
 }
 
 async function uploadChunk(
