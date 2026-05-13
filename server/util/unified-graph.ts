@@ -2,6 +2,7 @@ import { StateGraph, Annotation, END } from '@langchain/langgraph'
 import { ChatOpenAI } from '@langchain/openai'
 import type { UnifiedResponse } from '../../types/unified'
 import { getApiKey } from './get-api-key'
+import { skills } from '../skills/registry'
 
 const IMAGE_KEYWORDS = [
   '生成图片', '生成图像', '生成一幅', '生成一张',
@@ -93,21 +94,9 @@ function parseIntentResponse(raw: string): { intent: UnifiedState['intent']; ima
 
 // ─── 1. 状态类型定义 ───────────────────────────────────────────────────────────
 
-const GraphState = Annotation.Root({
-  userMessage: Annotation<string>({ reducer: (_, b) => b }),
-  reuseLLM: Annotation<boolean>({ reducer: (_, b) => b, default: () => true }),
-  intent: Annotation<'text' | 'image' | 'both'>({ reducer: (_, b) => b }),
-  history: Annotation<Array<{ role: string; content: string }>>({
-    reducer: (_, b) => b,
-    default: () => []
-  }),
-  textReply: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
-  imageUrl: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
-  imagePrompt: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
-  error: Annotation<string>({ reducer: (_, b) => b, default: () => '' })
-})
-
-export type UnifiedState = typeof GraphState.State
+import { GraphState } from '../types/unified-state'
+import type { UnifiedState } from '../types/unified-state'
+export { GraphState, UnifiedState }
 
 // ─── 2. 图编译单例（避免重复编译，提升性能） ─────────────────────────────────
 
@@ -126,34 +115,12 @@ function getCompiledGraph() {
   return _compiledGraph
 }
 
-// ─── 3. LLM 实例（闭包复用，只创建一次） ─────────────────────────────────────
+// ─── 3. LLM 实例（复用 llm-manager） ───────────────────────────────────────
 
-function createLLM(temperature = 0.7, maxTokens = 2000) {
-  return new ChatOpenAI({
-    modelName: 'qwen3.6-plus',
-    openAIApiKey: getApiKey(),
-    configuration: {
-      baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-    },
-    temperature,
-    maxTokens
-  })
-}
-
-function createLLMInstance() {
-  _llmCreateCount += 1
-  return createLLM()
-}
-
-let _llmInstance: ChatOpenAI | null = null
-let _llmCreateCount = 0
-
-function getLLM() {
-  if (!_llmInstance) {
-    _llmInstance = createLLMInstance()
-  }
-  return _llmInstance
-}
+import { getLLM as _getLLM, createNewLLMInstance as _createLLMInstance, getLLMStats } from './llm-manager'
+export { getLLM, createNewLLMInstance } from './llm-manager'
+const getLLM = _getLLM
+const createLLMInstance = _createLLMInstance
 
 let _classifierLLMInstance: ChatOpenAI | null = null
 
@@ -265,67 +232,14 @@ imagePrompt 使用英文，效果更好。
   }
 }
 
+// ─── 4. 节点函数（委托给 Skills 层） ────────────────────────────────────────
+
 async function textNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
-  const llm = state.reuseLLM ? getLLM() : createLLMInstance()
-
-  const messages: Array<{ role: string; content: string }> = [
-    { role: 'system', content: '你是一个乐于助人的 AI 助手。' },
-    ...state.history,
-    { role: 'user', content: state.userMessage }
-  ]
-
-  try {
-    const response = await llm.invoke(messages)
-    return { textReply: response.content as string }
-  } catch (err) {
-    return { error: `文字生成失败: ${(err as Error).message}` }
-  }
+  return skills.text.handler(state)
 }
 
 async function imageNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
-  const promptFromState = typeof state.imagePrompt === 'string' ? state.imagePrompt.trim() : ''
-  const prompt = promptFromState || state.userMessage.trim()
-
-  try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 120000)
-    const response = await fetch(
-      'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${getApiKey()}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'qwen-image-2.0',
-          input: { messages: [{ role: 'user', content: [{ text: prompt }] }] },
-          parameters: { size: '1024*1024', prompt_extend: true, watermark: false }
-        }),
-        signal: controller.signal
-      }
-    )
-    clearTimeout(timeoutId)
-
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => '')
-      throw new Error(`API 返回错误: ${response.status}${errorBody ? ` - ${errorBody}` : ''}`)
-    }
-
-    const data = await response.json() as {
-      output?: {
-        choices?: Array<{ message: { content: Array<{ image?: string }> } }>
-      }
-    }
-
-    const url = data.output?.choices?.[0]?.message?.content?.[0]?.image
-    if (!url) throw new Error('API 未返回图片 URL')
-
-    return { imageUrl: url }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : '未知错误'
-    return { error: `图片生成失败: ${message}` }
-  }
+  return skills.image.handler(state)
 }
 
 // ─── 5. 条件路由函数（使用 if 判断，逻辑清晰） ───────────────────────────────
@@ -393,16 +307,13 @@ export interface UnifiedGraphRuntimeStats {
 export function getUnifiedGraphRuntimeStats(): UnifiedGraphRuntimeStats {
   return {
     graphCompileCount: _graphCompileCount,
-    llmCreateCount: _llmCreateCount
+    llmCreateCount: getLLMStats().llmCreateCount
   }
 }
 
 export function resetUnifiedGraphRuntimeStats(options?: { resetSingletons?: boolean }) {
   _graphCompileCount = 0
-  _llmCreateCount = 0
-
   if (options?.resetSingletons) {
     _compiledGraph = null
-    _llmInstance = null
   }
 }
