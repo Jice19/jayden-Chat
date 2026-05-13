@@ -176,6 +176,7 @@ function keywordMatchScore(question: string, keywords: string[]): number {
   return score
 }
 
+// 读取支持的文本文档
 async function readSupportedTextDocument(userId: string, document: RagStoredDocument): Promise<string> {
   const filePath = getFinalFilePath(userId, document.storedName)
   const ext = (document.ext || '').toLowerCase()

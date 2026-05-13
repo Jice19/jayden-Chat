@@ -1,0 +1,16 @@
+{
+  "id": "1d86d221-d653-4884-a9c6-da37a6f337dc",
+  "userId": "cmoa3fm0v0000v8dil3yqrdoa",
+  "fileName": "LangChain练习题.md",
+  "fileHash": "23cd0d9688e02c73991dd9ab455392dad9de88c4feeaea0ad4468e957dfd0153",
+  "fileSize": 6261,
+  "chunkSize": 5242880,
+  "totalChunks": 1,
+  "uploadedChunkIndexes": [
+    0
+  ],
+  "status": "DONE",
+  "expiresAt": "2026-05-14T10:27:10.038Z",
+  "createdAt": "2026-05-13T10:27:10.037Z",
+  "updatedAt": "2026-05-13T10:27:10.577Z"
+}
