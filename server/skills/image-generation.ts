@@ -1,9 +1,13 @@
-import type { UnifiedState } from '../types/unified-state'
 import { generateImage } from '../util/aliyun-image'
 
+interface ImageSkillState {
+  userMessage: string
+  imagePrompt?: string
+}
+
 export async function imageGenerationSkill(
-  state: UnifiedState
-): Promise<Partial<UnifiedState>> {
+  state: ImageSkillState
+): Promise<{ imageUrl?: string; error?: string }> {
   const promptFromState =
     typeof state.imagePrompt === 'string' ? state.imagePrompt.trim() : ''
   const prompt = promptFromState || state.userMessage.trim()

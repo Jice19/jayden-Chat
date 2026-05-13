@@ -1,73 +1,127 @@
 import { StateGraph, Annotation, END } from '@langchain/langgraph'
-import { ChatOpenAI } from '@langchain/openai'
 import type { UnifiedResponse } from '../../types/unified'
-import { getApiKey } from './get-api-key'
 import { skills } from '../skills/registry'
+import { executeSkill } from '../skills/executor'
+import { getLLM } from './llm-manager'
 
-const IMAGE_KEYWORDS = [
-  '生成图片', '生成图像', '生成一幅', '生成一张',
-  '画一张', '画个', '帮我画', '画一幅',
-  'create image', 'draw', '生成图', '画图', '来个头像', '画个图',
-  '做张图', '做张图片', '生成个图', '生成一张图'
-]
-const TEXT_ONLY_KEYWORDS = [
-  '什么是', '怎么做', '为什么', '告诉我', '分析', '比较',
-  '区别', '推荐', '介绍', '讲解', '回答我', '解释一下',
-  '含义是什么', '工作原理', '怎么用', '如何使用'
-]
-const BOTH_KEYWORDS = [
-  '生成图片并解释', '生成图片并说明', '生成图片并描述',
-  '生成图并解释', '生成图并说明', '生成图并描述',
-  '画图并解释', '画图并说明', '画图并描述',
-  '画个图并解释', '画个图并说明', '画个图并描述',
-  '生成一张图并解释', '生成一张图并说明',
-  '帮我画并解释', '帮我生成图片并解释',
-  '生成图片并且说明', '生成图片而且解释',
-  'generate image and explain', 'draw and explain',
-  '生成图片然后解释', '生成图片再解释', '生成图片做解释',
-  '并解释', '并说明', '并描述', '并且说明', '而且说明'
-]
+const GraphState = Annotation.Root({
+  userMessage: Annotation<string>({ reducer: (_, b) => b }),
+  history: Annotation<Array<{ role: string; content: string }>>({
+    reducer: (_, b) => b,
+    default: () => []
+  }),
+  intent: Annotation<'text' | 'image' | 'both' | 'unknown'>({
+    reducer: (_, b) => b,
+    default: () => 'unknown'
+  }),
+  textReply: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
+  imageUrl: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
+  imagePrompt: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
+  error: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
+  agentOutput: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
+  executionLog: Annotation<Array<{ step: number; thought: string; action?: string; observation?: string }>>({
+    reducer: (a, b) => [...a, ...b],
+    default: () => []
+  })
+})
 
-function quickClassifyIntent(message: string): { intent: UnifiedState['intent']; imagePrompt: string } | null {
-  const msg = message.toLowerCase()
-  if (BOTH_KEYWORDS.some((k) => msg.includes(k))) {
-    const imagePart = extractImageSubject(message)
-    return { intent: 'both', imagePrompt: imagePart }
+export type UnifiedState = typeof GraphState.State
+
+const MAX_REACT_STEPS = 5
+
+const SYSTEM_PROMPT = `你是一个智能助手，基于 ReAct (Reasoning + Acting) 模式工作。
+
+## 可用工具
+
+1. **text_generation** - 用于：
+   - 回答用户问题
+   - 解释概念、原理
+   - 对话交流
+   - 分析、比较、推荐
+   - 当用户只想要文字回复时
+
+2. **image_generation** - 用于：
+   - 生成图片、画图
+   - 创建头像、插画
+   - 制作 logo、海报
+   - 当用户明确要求生成/画/创建图片时
+
+3. **final_response** - 用于：
+   - 当你已经获取了所有需要的信息
+   - 需要向用户返回最终结果时
+   - 调用此工具结束对话
+
+## 输出格式
+
+每一步必须输出 JSON 格式的思考和行动：
+
+\`\`\`json
+{
+  "thought": "你的思考过程，解释你为什么选择这个行动",
+  "action": "工具名称 (text_generation | image_generation | final_response)",
+  "action_input": {
+    // 对于 text_generation: {"textReply": "你的回答内容"}
+    // 对于 image_generation: {"imagePrompt": "图片描述"}
+    // 对于 final_response: {"textReply": "最终回复", "imageUrl": "可选的图片URL"}
   }
-  if (IMAGE_KEYWORDS.some((k) => msg.includes(k))) {
-    const hasTextOnly = TEXT_ONLY_KEYWORDS.some((k) => msg.includes(k))
-    if (!hasTextOnly) {
-      const imagePart = extractImageSubject(message)
-      return { intent: 'image', imagePrompt: imagePart }
-    }
+}
+\`\`\`
+
+## 决策规则
+
+- 如果用户问题需要专业知识但你不确定 → 先用 text_generation 获取信息
+- 如果用户要求生成图片 → 直接用 image_generation
+- 如果用户要求"生成图片并解释" → 先 image_generation，再 text_generation（回复中引用图片）
+- 如果用户只是聊天问答 → 用 text_generation
+- 如果已经获得所有需要的信息 → 用 final_response 结束
+
+## 示例
+
+用户: "画一只可爱的猫"
+\`\`\`json
+{
+  "thought": "用户明确要求生成一张猫的图片，包含'画'和'猫'关键词，应该使用图片生成工具",
+  "action": "image_generation",
+  "action_input": {"imagePrompt": "a cute cat, cartoon style"}
+}
+\`\`\`
+
+用户: "什么是量子计算"
+\`\`\`json
+{
+  "thought": "用户问的是一个概念性问题，需要用文字解释，应该使用文本生成工具",
+  "action": "text_generation",
+  "action_input": {}
+}
+\`\`\`
+
+用户: "帮我画个 logo 并解释含义"
+\`\`\`json
+{
+  "thought": "用户同时需要图片和解释，应该先用图片生成工具获取 logo",
+  "action": "image_generation",
+  "action_input": {"imagePrompt": "a modern minimalist logo design"}
+}
+\`\`\`
+
+## 重要提醒
+
+1. 每次只选择一个行动
+2. 如果是 text_generation 或 image_generation，你会收到工具执行结果，然后继续思考下一步
+3. 只有当所有信息都准备好后，才使用 final_response
+4. 最多执行 5 步，如果还没完成，强制使用 final_response 返回已有结果`
+
+interface ReActOutput {
+  thought: string
+  action: 'text_generation' | 'image_generation' | 'final_response'
+  action_input: {
+    textReply?: string
+    imagePrompt?: string
+    imageUrl?: string
   }
-  return null
 }
 
-function extractImageSubject(message: string): string {
-  const cleanMsg = message
-    .replace(/并解释|并说明|并描述|并且说明|而且说明|并且解释|而且解释/g, '')
-    .replace(/生成图片|生成图|生成一幅|生成一张|画一张|画个|帮我画|帮我生成|做个|做张/g, '')
-    .trim()
-  if (cleanMsg) return cleanMsg
-
-  const patterns = [
-    /生成[图片图幅张个](.+)/,
-    /画[个张幅](.+)/,
-    /帮我画(.+)/,
-    /帮我生成(.+)/
-  ]
-  for (const pattern of patterns) {
-    const match = message.match(pattern)
-    if (match?.[1]) {
-      const cleaned = match[1].replace(/并解释|并说明|并描述/g, '').trim()
-      if (cleaned) return cleaned
-    }
-  }
-  return message
-}
-
-function parseIntentResponse(raw: string): { intent: UnifiedState['intent']; imagePrompt: string } {
+function parseReActOutput(raw: string): ReActOutput | null {
   const cleaned = raw
     .replace(/```json\n?/g, '')
     .replace(/```\n?/g, '')
@@ -75,245 +129,224 @@ function parseIntentResponse(raw: string): { intent: UnifiedState['intent']; ima
     .trim()
 
   try {
-    const parsed = JSON.parse(cleaned) as { intent?: string; imagePrompt?: string }
-    const validIntents: UnifiedState['intent'][] = ['text', 'image', 'both']
-    return {
-      intent: validIntents.includes(parsed.intent as UnifiedState['intent']) ? (parsed.intent as UnifiedState['intent']) : 'text',
-      imagePrompt: typeof parsed.imagePrompt === 'string' ? parsed.imagePrompt.trim() : ''
+    const parsed = JSON.parse(cleaned) as ReActOutput
+    if (parsed.action && ['text_generation', 'image_generation', 'final_response'].includes(parsed.action)) {
+      return parsed
     }
   } catch {
-    const intentMatch = raw.match(/"intent"\s*:\s*"([^"]+)"/)
-    const promptMatch = raw.match(/"imagePrompt"\s*:\s*"([^"]+)"/)
-    const capturedIntent = intentMatch?.[1] as UnifiedState['intent']
-    return {
-      intent: ['text', 'image', 'both'].includes(capturedIntent) ? capturedIntent : 'text',
-      imagePrompt: promptMatch?.[1] || ''
+    const thoughtMatch = raw.match(/"thought"\s*:\s*"([^"]+)"/)
+    const actionMatch = raw.match(/"action"\s*:\s*"([^"]+)"/)
+
+    if (actionMatch?.[1] && ['text_generation', 'image_generation', 'final_response'].includes(actionMatch[1])) {
+      return {
+        thought: thoughtMatch?.[1] || '用户请求',
+        action: actionMatch[1] as ReActOutput['action'],
+        action_input: {}
+      }
+    }
+
+    const lowerRaw = raw.toLowerCase()
+    if (lowerRaw.includes('生成图片') || lowerRaw.includes('画') || lowerRaw.includes('image')) {
+      return { thought: '解析失败，基于关键词判断为图片生成请求', action: 'image_generation', action_input: {} }
+    }
+    if (lowerRaw.includes('final') || lowerRaw.includes('结束') || lowerRaw.includes('返回结果')) {
+      return { thought: '解析失败，基于关键词判断为结束请求', action: 'final_response', action_input: {} }
     }
   }
+  return null
 }
 
-// ─── 1. 状态类型定义 ───────────────────────────────────────────────────────────
-
-import { GraphState } from '../types/unified-state'
-import type { UnifiedState } from '../types/unified-state'
-export { GraphState, UnifiedState }
-
-// ─── 2. 图编译单例（避免重复编译，提升性能） ─────────────────────────────────
-
-let _compiledGraph: ReturnType<typeof buildGraph> | null = null
-let _graphCompileCount = 0
-
-function compileGraph() {
-  _graphCompileCount += 1
-  return buildGraph()
-}
-
-function getCompiledGraph() {
-  if (!_compiledGraph) {
-    _compiledGraph = compileGraph()
+function safeFallbackParse(raw: string): ReActOutput {
+  return {
+    thought: `无法解析 LLM 输出，当作文字生成处理: ${raw.slice(0, 50)}`,
+    action: 'text_generation',
+    action_input: {}
   }
-  return _compiledGraph
 }
 
-// ─── 3. LLM 实例（复用 llm-manager） ───────────────────────────────────────
+async function reasonNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
+  const llm = getLLM()
 
-import { getLLM as _getLLM, createNewLLMInstance as _createLLMInstance, getLLMStats } from './llm-manager'
-export { getLLM, createNewLLMInstance } from './llm-manager'
-const getLLM = _getLLM
-const createLLMInstance = _createLLMInstance
+  const historyText = state.history.length > 0
+    ? `\n\n对话历史:\n${state.history.map(h => `${h.role}: ${h.content}`).join('\n')}`
+    : ''
 
-let _classifierLLMInstance: ChatOpenAI | null = null
-
-function createClassifierLLM() {
-  return new ChatOpenAI({
-    modelName: 'qwen-plus',
-    openAIApiKey: getApiKey(),
-    configuration: {
-      baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-    },
-    temperature: 0.1,
-    maxTokens: 200
-  })
-}
-
-function getClassifierLLM() {
-  if (!_classifierLLMInstance) {
-    _classifierLLMInstance = createClassifierLLM()
+  const currentInfo: string[] = []
+  if (state.imageUrl) {
+    currentInfo.push(`- 已生成图片: ${state.imageUrl}`)
   }
-  return _classifierLLMInstance
-}
-
-// ─── 3.5 意图分类缓存 ─────────────────────────────────────────────────────────
-
-interface IntentCacheEntry {
-  intent: UnifiedState['intent']
-  imagePrompt: string
-}
-
-const _intentCache = new Map<string, IntentCacheEntry>()
-const INTENT_CACHE_MAX_SIZE = 1000
-
-function getIntentCacheKey(message: string): string {
-  return message.toLowerCase().slice(0, 50)
-}
-
-function getCachedIntent(message: string): IntentCacheEntry | undefined {
-  return _intentCache.get(getIntentCacheKey(message))
-}
-
-function setCachedIntent(message: string, entry: IntentCacheEntry): void {
-  if (_intentCache.size >= INTENT_CACHE_MAX_SIZE) {
-    const firstKey = _intentCache.keys().next().value
-    if (firstKey) _intentCache.delete(firstKey)
+  if (state.textReply) {
+    currentInfo.push(`- 已生成文字回复: ${state.textReply.slice(0, 50)}...`)
   }
-  _intentCache.set(getIntentCacheKey(message), entry)
-}
+  const currentInfoText = currentInfo.length > 0
+    ? `\n\n当前已获取的信息:\n${currentInfo.join('\n')}`
+    : ''
 
-// ─── 4. 节点函数 ──────────────────────────────────────────────────────────────
+  const messages = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: `用户消息: ${state.userMessage}${historyText}${currentInfoText}` }
+  ]
 
-async function routerNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
-  const cached = getCachedIntent(state.userMessage)
-  if (cached) {
-    return {
-      intent: cached.intent,
-      imagePrompt: cached.imagePrompt || state.userMessage
-    }
+  if (state.executionLog.length > 0) {
+    const logText = state.executionLog.map(entry => {
+      let text = `步骤 ${entry.step}: ${entry.thought}`
+      if (entry.action) text += `\n行动: ${entry.action}`
+      if (entry.observation) text += `\n结果: ${entry.observation}`
+      return text
+    }).join('\n\n')
+    messages.push({ role: 'system', content: `\n\n执行记录:\n${logText}\n\n请根据以上记录继续思考下一步行动。` })
   }
-
-  const quickResult = quickClassifyIntent(state.userMessage)
-  if (quickResult) {
-    const entry: IntentCacheEntry = { intent: quickResult.intent, imagePrompt: quickResult.imagePrompt }
-    setCachedIntent(state.userMessage, entry)
-    return {
-      intent: quickResult.intent,
-      imagePrompt: quickResult.imagePrompt || state.userMessage
-    }
-  }
-
-  const llm = state.reuseLLM ? getClassifierLLM() : createClassifierLLM()
-
-  const systemPrompt = `你是一个意图分析助手。根据用户消息返回 JSON 格式：
-{"intent": "text" | "image" | "both", "imagePrompt": "英文图片生成提示词"}
-
-示例：
-- "画一只可爱的猫" → {"intent": "image", "imagePrompt": "a cute cat, cartoon style"}
-- "什么是量子计算" → {"intent": "text", "imagePrompt": ""}
-- "生成一个 logo 并解释含义" → {"intent": "both", "imagePrompt": "a modern minimalist logo design"}
-- "帮我画个头像" → {"intent": "image", "imagePrompt": "a profile picture avatar"}
-- "解释一下什么是机器学习" → {"intent": "text", "imagePrompt": ""}
-- "画一个日出风景图" → {"intent": "image", "imagePrompt": "a sunrise landscape painting"}
-
-判断规则：
-- 明确要求生成/画/创建图片 → image
-- 纯问答/解释/说明类请求 → text
-- 同时要求图片和文字解释 → both
-- 不确定时默认 → text
-
-imagePrompt 使用英文，效果更好。
-
-只返回 JSON，不要有其他文字。`
 
   try {
-    const response = await llm.invoke([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: state.userMessage }
-    ])
+    const response = await llm.invoke(messages)
+    const output = response.content as string
 
-    const { intent, imagePrompt } = parseIntentResponse(response.content as string)
-    const entry: IntentCacheEntry = { intent, imagePrompt }
-    setCachedIntent(state.userMessage, entry)
+    const parsed = parseReActOutput(output) || safeFallbackParse(output)
 
     return {
-      intent,
-      imagePrompt: imagePrompt || state.userMessage
+      agentOutput: JSON.stringify(parsed),
+      executionLog: [{
+        step: state.executionLog.length + 1,
+        thought: parsed.thought,
+        action: parsed.action,
+        observation: ''
+      }]
     }
-  } catch {
-    return { intent: 'text', imagePrompt: '' }
+  } catch (err) {
+    return { error: `推理失败: ${(err as Error).message}` }
   }
 }
 
-// ─── 4. 节点函数（委托给 Skills 层） ────────────────────────────────────────
+async function actNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
+  const parsed = parseReActOutput(state.agentOutput) || safeFallbackParse(state.agentOutput)
 
-async function textNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
-  return skills.text.handler(state)
+  switch (parsed.action) {
+    case 'text_generation': {
+      const result = await executeSkill('text', {
+        userMessage: state.userMessage,
+        history: state.history,
+        imageUrl: state.imageUrl
+      })
+      if (result.success && result.data) {
+        const newLog = [...state.executionLog]
+        newLog[newLog.length - 1].observation = `生成的文字回复: ${(result.data.textReply || '').slice(0, 50)}...`
+        return {
+          textReply: result.data.textReply || '',
+          intent: state.imageUrl ? 'both' : 'text',
+          executionLog: newLog
+        }
+      }
+      return { error: result.error || '文本生成失败' }
+    }
+
+    case 'image_generation': {
+      const imagePrompt = parsed.action_input.imagePrompt || state.userMessage
+      const result = await executeSkill('image', { userMessage: state.userMessage, imagePrompt })
+      if (result.success && result.data) {
+        const newLog = [...state.executionLog]
+        newLog[newLog.length - 1].observation = `生成的图片: ${result.data.imageUrl || '成功'}`
+        return {
+          imageUrl: result.data.imageUrl || '',
+          intent: state.textReply ? 'both' : 'image',
+          imagePrompt,
+          executionLog: newLog
+        }
+      }
+      return { error: result.error || '图片生成失败' }
+    }
+
+    case 'final_response': {
+      const textReply = parsed.action_input.textReply || state.textReply || ''
+      const imageUrl = parsed.action_input.imageUrl || state.imageUrl || ''
+      const intent: UnifiedState['intent'] = imageUrl ? 'both' : (textReply ? 'text' : 'unknown')
+
+      return {
+        textReply,
+        imageUrl,
+        intent
+      }
+    }
+
+    default:
+      return { error: `未知行动: ${parsed.action}` }
+  }
 }
 
-async function imageNode(state: UnifiedState): Promise<Partial<UnifiedState>> {
-  return skills.image.handler(state)
+function shouldContinue(state: UnifiedState): string {
+  if (state.error) return '__end__'
+  if (state.executionLog.length >= MAX_REACT_STEPS) return 'finish'
+
+  const parsed = parseReActOutput(state.agentOutput) || safeFallbackParse(state.agentOutput)
+
+  if (parsed.action === 'final_response') return 'finish'
+
+  if (parsed.action === 'text_generation' && state.imageUrl) return 'reason'
+  if (parsed.action === 'image_generation' && state.textReply) return 'reason'
+
+  if (state.textReply && state.imageUrl) return 'finish'
+
+  return 'reason'
 }
-
-// ─── 5. 条件路由函数（使用 if 判断，逻辑清晰） ───────────────────────────────
-
-function routeFromRouter(state: UnifiedState): string {
-  const intent = state.intent
-  if (intent === 'image') return 'image'
-  if (intent === 'both') return 'text'
-  return 'text'
-}
-
-function routeFromText(state: UnifiedState): string {
-  if (state.intent === 'both') return 'image'
-  return '__end__'
-}
-
-// ─── 6. 构建图 ────────────────────────────────────────────────────────────────
 
 function buildGraph() {
   const graph = new StateGraph(GraphState)
-    .addNode('router', routerNode)
-    .addNode('text', textNode)
-    .addNode('image', imageNode)
-    .addEdge('__start__', 'router')
-    .addConditionalEdges('router', routeFromRouter, {
-      text: 'text',
-      image: 'image'
+    .addNode('reason', reasonNode)
+    .addNode('act', actNode)
+    .addEdge('__start__', 'reason')
+    .addConditionalEdges('act', shouldContinue, {
+      reason: 'reason',
+      finish: '__end__',
+      __end__: '__end__'
     })
-    .addConditionalEdges('text', routeFromText, {
-      image: 'image',
-      __end__: END
-    })
-    .addEdge('image', END)
+    .addConditionalEdges('reason', () => 'act')
 
   return graph.compile()
 }
 
-// ─── 7. 对外暴露的主函数 ──────────────────────────────────────────────────────
+let _compiledGraph: ReturnType<typeof buildGraph> | null = null
+
+function getCompiledGraph() {
+  if (!_compiledGraph) {
+    _compiledGraph = buildGraph()
+  }
+  return _compiledGraph
+}
 
 export async function runUnifiedGraph(
   userMessage: string,
   history: Array<{ role: string; content: string }> = [],
   options?: {
     reuseCompiledGraph?: boolean
-    reuseLLM?: boolean
   }
 ): Promise<UnifiedResponse> {
   const reuseCompiledGraph = options?.reuseCompiledGraph ?? true
-  const reuseLLM = options?.reuseLLM ?? true
-  const app = reuseCompiledGraph ? getCompiledGraph() : compileGraph()
-  const result = await app.invoke({ userMessage, history, reuseLLM })
+  const app = reuseCompiledGraph ? getCompiledGraph() : buildGraph()
+
+  const result = await app.invoke({
+    userMessage,
+    history,
+    executionLog: []
+  })
+
+  const intent: UnifiedResponse['intent'] =
+    result.intent === 'unknown' ? 'text' : result.intent
+
   return {
-    intent: result.intent,
+    intent,
     textReply: result.textReply,
     imageUrl: result.imageUrl,
     error: result.error
   }
 }
 
-export interface UnifiedGraphRuntimeStats {
-  graphCompileCount: number
-  llmCreateCount: number
-}
+let _graphCompileCount = 0
 
-export function getUnifiedGraphRuntimeStats(): UnifiedGraphRuntimeStats {
+export function getUnifiedGraphRuntimeStats() {
   return {
-    graphCompileCount: _graphCompileCount,
-    llmCreateCount: getLLMStats().llmCreateCount
+    graphCompileCount: _graphCompileCount
   }
 }
 
-export function resetUnifiedGraphRuntimeStats(options?: { resetSingletons?: boolean }) {
+export function resetUnifiedGraphRuntimeStats(_options?: { resetSingletons?: boolean }) {
   _graphCompileCount = 0
-  if (options?.resetSingletons) {
-    _compiledGraph = null
-  }
 }
